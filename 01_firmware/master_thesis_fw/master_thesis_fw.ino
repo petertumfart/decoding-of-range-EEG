@@ -52,20 +52,22 @@ void command_selection(char parameter, uint8_t value) {
 void turn_on_led(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
     Serial.print("Turning on LED on position: ");
-    Serial.println(pos);
+    Serial.print(pos);
+    Serial.print("\r");
   }
   else{
-    Serial.println("Position not available!");
+    Serial.print("Position not available!\r");
   }
 }
 
 void turn_off_led(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
     Serial.print("Turning off LED on position: ");
-    Serial.println(pos);
+    Serial.print(pos);
+    Serial.print("\r");
   }
   else{
-    Serial.println("Position not available!");
+    Serial.print("Position not available!\r");
   }
 }
 
@@ -73,19 +75,20 @@ void turn_off_led(char pos){
 void read_photodiode(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
     Serial.print("Reading photodiode on position: ");
-    Serial.println(pos);
+    Serial.print(pos);
+    Serial.print("\r");
   }
   else{
-    Serial.println("Position not available!");
+    Serial.print("Position not available!\r");
   }
 }
 
 
 
 void print_header(){
-  Serial.println("Printing header:");
-  Serial.println("h\t\t Print header");
-  Serial.println("a <l,r,c,t,b>\t Turn on LED position");
-  Serial.println("b <1,r,c,t,b>\t Turn off LED position");
-  Serial.println("c <l,r,c,t,b>\t Read photresistor position");
+  Serial.print("Printing header:\r");
+  Serial.print("h\t\t Print header\r");
+  Serial.print("a <l,r,c,t,b>\t Turn on LED position\r");
+  Serial.print("b <1,r,c,t,b>\t Turn off LED position\r");
+  Serial.print("c <l,r,c,t,b>\t Read photresistor position\r");
 }
