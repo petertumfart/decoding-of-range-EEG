@@ -13,6 +13,7 @@
 
 uint8_t led_pin[5] = {2,3,4,5,6};
 uint8_t ldr_pin[5] = {A0, A1, A2, A3, A4};
+char letter_map[5] = {'l', 'r', 'c', 't', 'b'};
 
 void setup() {
   // put your setup code here, to run once:
@@ -67,6 +68,7 @@ void command_selection(char parameter, uint8_t value) {
 
 void turn_on_led(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
+    digitalWrite(get_array_index(pos), HIGH);
     Serial.print("Turning on LED on position: ");
     Serial.print(pos);
     Serial.print("\r");
@@ -78,6 +80,7 @@ void turn_on_led(char pos){
 
 void turn_off_led(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
+    digitalWrite(get_array_index(pos), LOW);
     Serial.print("Turning off LED on position: ");
     Serial.print(pos);
     Serial.print("\r");
@@ -100,6 +103,13 @@ void read_photodiode(char pos){
 }
 
 
+uint8_t get_array_index(char letter){
+  for (uint8_t i=0; i<N_LED; i++){
+    if (letter == letter_map[i]){
+      return i;
+    }
+  }
+}
 
 void print_header(){
   Serial.print("Printing header:\r");
