@@ -11,29 +11,24 @@
 
  #include "defines.h"
 
+uint8_t led_pin[5] = {2,3,4,5,6};
+uint8_t ldr_pin[5] = {A0, A1, A2, A3, A4};
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200); // Starting the serial connection.
   delay(1000); // Necessary to avoid double printing of header.
 
-  // Setup LEDS and LDRs:
-  pinMode(LED_L, OUTPUT);
-  pinMode(LED_R, OUTPUT);
-  pinMode(LED_C, OUTPUT);
-  pinMode(LED_T, OUTPUT);
-  pinMode(LED_B, OUTPUT);
-  digitalWrite(LED_L, LOW);
-  digitalWrite(LED_R, LOW);
-  digitalWrite(LED_C, LOW);
-  digitalWrite(LED_T, LOW);
-  digitalWrite(LED_B, LOW);
+  // Setup LEDs:
+  for (uint8_t i=0; i<N_LED; i++){
+    pinMode(led_pin[i], OUTPUT);
+    digitalWrite(led_pin[i], LOW);
+  }
 
-  pinMode(LDR_L, INPUT);
-  pinMode(LDR_R, INPUT);
-  pinMode(LDR_C, INPUT);
-  pinMode(LDR_T, INPUT);
-  pinMode(LDR_B, INPUT);
+  // Setup LDRs:
+  for (uint8_t i=0; i<N_LDR; i++){
+    pinMode(ldr_pin[i], INPUT);
+  }
   
   print_header();
 }
