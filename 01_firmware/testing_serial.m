@@ -1,5 +1,3 @@
-
-
 s = serialport("COM8",115200,"Timeout",5);
 s.Terminator;
 configureTerminator(s,"CR");
