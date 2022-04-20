@@ -9,11 +9,32 @@
  * @see https://github.com/ptrt/master-thesis
  */
 
+ #include "defines.h"
+
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200); // Starting the serial connection.
   delay(1000); // Necessary to avoid double printing of header.
+
+  // Setup LEDS and LDRs:
+  pinMode(LED_L, OUTPUT);
+  pinMode(LED_R, OUTPUT);
+  pinMode(LED_C, OUTPUT);
+  pinMode(LED_T, OUTPUT);
+  pinMode(LED_B, OUTPUT);
+  digitalWrite(LED_L, LOW);
+  digitalWrite(LED_R, LOW);
+  digitalWrite(LED_C, LOW);
+  digitalWrite(LED_T, LOW);
+  digitalWrite(LED_B, LOW);
+
+  pinMode(LDR_L, INPUT);
+  pinMode(LDR_R, INPUT);
+  pinMode(LDR_C, INPUT);
+  pinMode(LDR_T, INPUT);
+  pinMode(LDR_B, INPUT);
+  
   print_header();
 }
 
