@@ -14,6 +14,9 @@
 uint8_t led_pin[5] = {2,3,4,5,6};
 uint8_t ldr_pin[5] = {A0, A1, A2, A3, A4};
 char letter_map[5] = {'l', 'r', 'c', 't', 'b'};
+uint16_t ldr_val[5];
+bool first_time_dark[5] = {false, false, false, false, false};
+bool first_time_bright[5]= {false, false, false, false, false};
 
 void setup() {
   // put your setup code here, to run once:
@@ -29,7 +32,10 @@ void setup() {
   // Setup LDRs:
   for (uint8_t i=0; i<N_LDR; i++){
     pinMode(ldr_pin[i], INPUT);
+    ldr_val[i] = analogRead(ldr_pin[i]);
   }
+
+  digitalWrite(led_pin[0], LOW);
   
   print_header();
 }
@@ -37,7 +43,19 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   handle_serial();
-  
+
+
+  for (uint8_t i=0; i<N_LDR; i++){
+    ldr_val[i] = analogRead(ldr_pin[i]);
+    check_ldr(ldr_val[i], i);
+  }
+
+  /*if (analogRead(ldr_pin[0]) < 100){
+    digitalWrite(led_pin[0], HIGH);
+  }
+  else{
+    digitalWrite(led_pin[0], LOW);
+  }*/
 }
 
 
@@ -108,6 +126,20 @@ uint8_t get_array_index(char letter){
     if (letter == letter_map[i]){
       return i;
     }
+  }
+}
+
+void check_ldr(uint16_t current, uint8_t index){
+  if (!first_time_dark[index] && current < THRESHOLD){
+    // Signalise finster:
+    first_time_dark[index] = true;
+    first_time_bright[index] = false;
+  }
+
+  if (!first_time_bright[index] && current > THRESHOLD){
+    // Signalise hell:
+    first_time_bright[index] = true;
+    first_time_dark[index] = false;
   }
 }
 
