@@ -44,18 +44,13 @@ void loop() {
   // put your main code here, to run repeatedly:
   handle_serial();
 
-
+  // Get all adc values and perform check if it's 
+  // the first time to trigger the threshold:
   for (uint8_t i=0; i<N_LDR; i++){
     ldr_val[i] = analogRead(ldr_pin[i]);
     check_ldr(ldr_val[i], i);
   }
-
-  /*if (analogRead(ldr_pin[0]) < 100){
-    digitalWrite(led_pin[0], HIGH);
-  }
-  else{
-    digitalWrite(led_pin[0], LOW);
-  }*/
+  
 }
 
 
