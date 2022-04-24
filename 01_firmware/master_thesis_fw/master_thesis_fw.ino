@@ -49,8 +49,7 @@ void loop() {
   for (uint8_t i=0; i<N_LDR; i++){
     ldr_val[i] = analogRead(ldr_pin[i]);
     check_ldr(ldr_val[i], i);
-  }
-  
+  }  
 }
 
 
@@ -108,6 +107,8 @@ void read_photodiode(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
     Serial.print("Reading photodiode on position: ");
     Serial.print(pos);
+    Serial.print(" val: ");
+    Serial.print(ldr_val[get_array_index(pos)]);
     Serial.print("\r");
   }
   else{
@@ -129,12 +130,14 @@ void check_ldr(uint16_t current, uint8_t index){
     // Signalise finster:
     first_time_dark[index] = true;
     first_time_bright[index] = false;
+    Serial.print(letter_map[index]); Serial.print(" 0\r");
   }
 
   if (!first_time_bright[index] && current > THRESHOLD){
     // Signalise hell:
     first_time_bright[index] = true;
     first_time_dark[index] = false;
+    Serial.print(letter_map[index]); Serial.print(" 1\r");
   }
 }
 
