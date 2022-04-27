@@ -11,9 +11,9 @@
 
  #include "defines.h"
 
-uint8_t led_pin[5] = {2,3,4,5,6};
+uint8_t led_pin[5] = {4,6,8,10,12};
 uint8_t ldr_pin[5] = {A0, A1, A2, A3, A4};
-char letter_map[5] = {'l', 'r', 'c', 't', 'b'};
+char letter_map[5] = {'c', 'r', 'l', 'b', 't'};
 uint16_t ldr_val[5];
 bool first_time_dark[5] = {false, false, false, false, false};
 bool first_time_bright[5]= {false, false, false, false, false};
@@ -35,7 +35,6 @@ void setup() {
     ldr_val[i] = analogRead(ldr_pin[i]);
   }
 
-  digitalWrite(led_pin[0], LOW);
   
   print_header();
 }
@@ -43,13 +42,20 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   handle_serial();
-
+  
   // Get all adc values and perform check if it's 
   // the first time to trigger the threshold:
   for (uint8_t i=0; i<N_LDR; i++){
     ldr_val[i] = analogRead(ldr_pin[i]);
     check_ldr(ldr_val[i], i);
   }  
+  /*
+  Serial.print("c: "); Serial.print(ldr_val[0]); 
+  Serial.print(" r: "); Serial.print(ldr_val[1]); 
+  Serial.print(" l: "); Serial.print(ldr_val[2]);
+  Serial.print(" b: "); Serial.print(ldr_val[3]);
+  Serial.print(" t: "); Serial.print(ldr_val[4]);
+  Serial.print("\r");*/
 }
 
 
@@ -80,10 +86,8 @@ void command_selection(char parameter, uint8_t value) {
 
 void turn_on_led(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
-    digitalWrite(get_array_index(pos), HIGH);
-    Serial.print("Turning on LED on position: ");
-    Serial.print(pos);
-    Serial.print("\r");
+    digitalWrite(led_pin[get_array_index(pos)], HIGH);
+    Serial.print("a ");Serial.print(pos); Serial.print(" 1\r");
   }
   else{
     Serial.print("Position not available!\r");
@@ -92,10 +96,8 @@ void turn_on_led(char pos){
 
 void turn_off_led(char pos){
   if (pos == 'l' || pos == 'r' || pos == 'c' || pos == 't' || pos == 'b'){
-    digitalWrite(get_array_index(pos), LOW);
-    Serial.print("Turning off LED on position: ");
-    Serial.print(pos);
-    Serial.print("\r");
+    digitalWrite(led_pin[get_array_index(pos)], LOW);
+    Serial.print("b ");Serial.print(pos); Serial.print(" 0\r");
   }
   else{
     Serial.print("Position not available!\r");
@@ -130,14 +132,14 @@ void check_ldr(uint16_t current, uint8_t index){
     // Signalise finster:
     first_time_dark[index] = true;
     first_time_bright[index] = false;
-    Serial.print(letter_map[index]); Serial.print(" 0\r");
+    Serial.print("c ");Serial.print(letter_map[index]); Serial.print(" 0\r");
   }
 
   if (!first_time_bright[index] && current > THRESHOLD){
     // Signalise hell:
     first_time_bright[index] = true;
     first_time_dark[index] = false;
-    Serial.print(letter_map[index]); Serial.print(" 1\r");
+    Serial.print("c "); Serial.print(letter_map[index]); Serial.print(" 1\r");
   }
 }
 
