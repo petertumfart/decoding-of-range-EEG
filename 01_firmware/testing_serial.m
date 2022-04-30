@@ -20,16 +20,42 @@ ret_val = read_serial(s, 1);
 
 % Initialization:
 send_serial(s, commands(1), positions(1));
-pause(0.2)
+pause(0.1)
 send_serial(s, commands(2), positions(1));
 send_serial(s, commands(1), positions(4));
-pause(0.2)
+pause(0.1)
 send_serial(s, commands(2), positions(4));
 send_serial(s, commands(1), positions(2));
-pause(0.2)
+pause(0.1)
 send_serial(s, commands(2), positions(2));
 send_serial(s, commands(1), positions(5));
-pause(0.2)
+pause(0.1)
+send_serial(s, commands(2), positions(5));
+
+send_serial(s, commands(1), positions(1));
+pause(0.1)
+send_serial(s, commands(2), positions(1));
+send_serial(s, commands(1), positions(4));
+pause(0.1)
+send_serial(s, commands(2), positions(4));
+send_serial(s, commands(1), positions(2));
+pause(0.1)
+send_serial(s, commands(2), positions(2));
+send_serial(s, commands(1), positions(5));
+pause(0.1)
+send_serial(s, commands(2), positions(5));
+
+send_serial(s, commands(1), positions(1));
+pause(0.1)
+send_serial(s, commands(2), positions(1));
+send_serial(s, commands(1), positions(4));
+pause(0.1)
+send_serial(s, commands(2), positions(4));
+send_serial(s, commands(1), positions(2));
+pause(0.1)
+send_serial(s, commands(2), positions(2));
+send_serial(s, commands(1), positions(5));
+pause(0.1)
 send_serial(s, commands(2), positions(5));
 
 send_serial(s, commands(1), positions(1));
