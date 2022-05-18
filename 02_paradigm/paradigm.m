@@ -99,16 +99,40 @@ trial_reach_on = trial_reach_on(perm_idcs,:);
 trial_reach_off = trial_reach_off(perm_idcs,:);
 
 %% Connect to serial:
-s = serialport("COM8",115200,"Timeout",5);
-s.Terminator;
-configureTerminator(s,"CR");
+
+%!!!!!! Switching between versions: 
+% Matlab >= 2019b: 
+% Uncomment block for matlab 2019b and greater
+% Change fgetl(s) to readline(s)
+% Change fprintf to writeline
+% Change BytesAvailable to NumBytesAvailable
+% Change read_serial_old_versions to read_serial
+% Change read_val(5) to read_val{1}(5)
+% https://www.mathworks.com/help/matlab/import_export/transition-your-code-to-serialport-interface.html#mw_18d02de5-6764-439f-8bc7-fca0f40522d3
+% For old versions:
+% Use: instrreset to release serial port when not propper closed
+% Propper closing: for matlab <= 2019a: fclose(s); delete(s); clear s;
+
+
+
+% Matlab 2019b and greater:
+% s = serialport("COM8",115200,"Timeout",5);
+% s.Terminator;
+% configureTerminator(s,"CR");
+
+
+% matlab 2019a and lower:
+s = serial('COM5');
+s.BaudRate = 115200;
+s.Terminator = 'CR';
+fopen(s);
 
 pause(3);
 
 % Wait until the initial command is received:
 read_val = [];
-while s.NumBytesAvailable > 0
-    read_val = [read_val, readline(s)];
+while s.BytesAvailable > 0
+    read_val = [read_val, fgetl(s)]; % readline(s) to fgetl(s)
 end
 
 
@@ -143,9 +167,9 @@ for iTrial = 1:N_trials
     
     %% INDICATION PERIOD:
     % Turn on the correct LED:
-    writeline(s,trial_ind_on(iTrial,:));
+    fprintf(s,trial_ind_on(iTrial,:)); % writeline to sprintf
     % Get acknowledge:
-    ret_val = read_serial(s,1);
+    ret_val = read_serial_old_versions(s,1);
     if ret_val == 'x'
         fprintf('Error in serial communication!!!\n');
         break;
@@ -155,32 +179,33 @@ for iTrial = 1:N_trials
     % Wait between indication and reach and send marker when touched/released:
     t_start = tic;
     while toc(t_start) < timings.indication
-        if s.NumBytesAvailable > 0
-            read_val = readline(s);
-            if read_val{1}(5) == '0'
-                markers_out.push_sample(markers.touch);
-                disp('Touch')
-            else
-                markers_out.push_sample(markers.release);
-                disp('Release')
-            end
+        if s.BytesAvailable > 0
+            read_val = {fgetl(s)};
+            markers_out.push_sample(read_val);
+%             if read_val(5) == '0'
+%                 markers_out.push_sample(read_val);
+%                 disp('Touch')
+%             else
+%                 markers_out.push_sample(read_val);
+%                 disp('Release')
+%             end
         end
     end
     disp(toc(t_start))
     
-    %% RECHING PERIOD:
+    %% REACHING PERIOD:
     % Turn off the indication LED:
-    writeline(s,trial_ind_off(iTrial,:));
+    fprintf(s,trial_ind_off(iTrial,:));
     % Get acknowledge:
-    ret_val = read_serial(s,1);
+    ret_val = read_serial_old_versions(s,1);
     if ret_val == 'x'
         fprintf('Error in serial communication!!!\n');
         break;
     end
     % Turn on the reaching LED:
-    writeline(s,trial_reach_on(iTrial,:));
+    fprintf(s,trial_reach_on(iTrial,:));
     % Get acknowledge:
-    ret_val = read_serial(s,1);
+    ret_val = read_serial_old_versions(s,1);
     if ret_val == 'x'
         fprintf('Error in serial communication!!!\n');
         break;
@@ -190,23 +215,24 @@ for iTrial = 1:N_trials
     % Wait for reaching period and send marker when touched/released:
     t_start = tic;
     while toc(t_start) < timings.reach
-        if s.NumBytesAvailable > 0
-            read_val = readline(s);
-            if read_val{1}(5) == '0'
-                markers_out.push_sample(markers.touch);
-                disp('Touch')
-            else
-                markers_out.push_sample(markers.release);
-                disp('Release')
-            end
+        if s.BytesAvailable > 0
+            read_val = {fgetl(s)};
+            markers_out.push_sample(read_val);
+%             if read_val(5) == '0'
+%                 markers_out.push_sample(read_val);
+%                 disp('Touch')
+%             else
+%                 markers_out.push_sample(read_val);
+%                 disp('Release')
+%             end
         end
     end
     disp(toc(t_start))
     
     % Turn off reaching LED:
-    writeline(s,trial_reach_off(iTrial,:));
+    fprintf(s,trial_reach_off(iTrial,:));
     % Get acknowledge:
-    ret_val = read_serial(s,1);
+    ret_val = read_serial_old_versions(s,1);
     if ret_val == 'x'
         fprintf('Error in serial communication!!!\n');
         break;
@@ -221,15 +247,16 @@ for iTrial = 1:N_trials
     break_time = timings.min_break + timings.break_variation * rand;
     t_start = tic;
     while toc(t_start) < break_time
-        if s.NumBytesAvailable > 0
-            read_val = readline(s);
-            if read_val{1}(5) == '0'
-                markers_out.push_sample(markers.touch);
-                disp('Touch')
-            else
-                markers_out.push_sample(markers.release);
-                disp('Release')
-            end
+        if s.BytesAvailable > 0
+            read_val = {fgetl(s)};
+            markers_out.push_sample(read_val);
+%             if read_val(5) == '0'
+%                 markers_out.push_sample(read_val);
+%                 disp('Touch')
+%             else
+%                 markers_out.push_sample(read_val);
+%                 disp('Release')
+%             end
         end
     end
     disp(toc(t_start)) 
@@ -243,5 +270,11 @@ display('End of Experiment. Please stop recording.');
 clear lib
 pause(0.5)
 clear markers_out
+
+% For matlab <= 2019a
+fclose(s)
+delete(s)
+
+
 clear s
 
