@@ -160,6 +160,7 @@ disp('Starting...');
 pause(7);
 
 %% Trials
+t_overall = tic;
 for iTrial = 1:N_trials
     trial_type = trial_labels(iTrial);
     markers_out.push_sample(markers.classes(trial_type));
@@ -240,7 +241,7 @@ for iTrial = 1:N_trials
     
     %% BREAK PERIOD:
     % Signalise end with beep:
-    sound(beep_sine);
+    sound(beep_sine, fs_sound);
     % Send break indication marker:
     markers_out.push_sample(markers.break);
     % Wait for break period and send marker when touched/released:
@@ -263,7 +264,7 @@ for iTrial = 1:N_trials
     
 
 end
-
+disp(toc(t_overall));
 display('End of Experiment. Please stop recording.');
 
 %%

@@ -4,7 +4,7 @@ clc
 
 %% Defines:
 classes = {'Rest', 'Horz','Vert', 'Blink'};
-trials_perclass = 9;
+trials_perclass = 6;
 Fs = 512; % Sampling rate
 
 %fixed markers
@@ -55,6 +55,10 @@ beep_sine = sin(2*pi*f*t);
 N_classes = length(classes);
 
 classes_nrTrials = repmat(trials_perclass, 1, N_classes);
+
+% Add 3 trials for Rest:
+classes_nrTrials(1) = classes_nrTrials(1) + 3;
+
 N_trials = sum(classes_nrTrials);
 
 %% Create parameter set of types of labels and number of trials per label and
