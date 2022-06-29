@@ -265,7 +265,7 @@ for iTrial = 1:N_trials
 
 end
 disp(toc(t_overall));
-display('End of Experiment. Please stop recording.');
+disp('End of Experiment. Please stop recording.');
 
 %%
 clear lib
