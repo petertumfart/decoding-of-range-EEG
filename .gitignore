@@ -1,2 +1,10 @@
+//Files
 *.asv
+*.pdf
+*.bak
+
+// Folders
 00_additionals/
+data/
+.idea/
+__pycache__/
