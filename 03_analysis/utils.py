@@ -592,8 +592,11 @@ def create_scores_df():
             'Date',
             'Time']
 
-    return pd.DataFrame(columns=cols)
+    df = pd.DataFrame(columns=cols)
+    df['5-point'] = df['5-point'].astype(bool)
 
-def load_raw_file(path, file):
-    file = path + '/' + file
+    return df
+
+def load_raw_file(dirpath, file):
+    file = dirpath + '/' + file
     return mne.io.read_raw(file, preload=True)
