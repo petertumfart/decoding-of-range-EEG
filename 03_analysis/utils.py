@@ -16,6 +16,7 @@ import datetime
 from datetime import datetime, timezone
 import pickle
 import plotly.express as px
+from sklearn.covariance import LedoitWolf
 
 def split_streams(streams):
     """Seperate the streams from the xdf file into an EEG-stream and a Markers stream.
@@ -653,7 +654,7 @@ def create_parameter_matrix(epochs, z_scoring=True):
     # Return S matrix:
     return np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
 
-def glm(S, epochs):
+def glm(S, epochs, shrinkage=False):
     """
     Applies a generalized linear model to estimate the contribution of experimental conditions to EEG data.
 
@@ -685,20 +686,27 @@ def glm(S, epochs):
     A_full = np.empty((n_channels, n_conditions, n_timestamps), dtype=float)
     A_full[:] = np.nan
 
-    S = S.T
-    pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
+    if shrinkage:
+        cov = LedoitWolf().fit(S.T)
+        Css_inv = np.linalg.inv(cov.covariance_)
+    else:
+        pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
     for tp in range(len(epochs.times)):
-        X = X_full[:,:,tp] # Get data matrix for current timestamp
-        A = pseudo_inv.dot(X) # Solve inverse problem
+        X = X_full[:,:,tp].T # Get data matrix for current timestamp
 
-        A_full[:,:,tp] = A.T
-        X_hat = S.dot(A) # Get EEG activity explained by conditions
-        X_full_recon[:,:,tp] = X_hat # Add to reconstructed EEG
-        X_residuals[:,:,tp] = X-X_hat # Add residuals to residuals EEG
+        if shrinkage:
+            A = X.dot(S.T).dot(Css_inv)
+        else:
+            A = X.dot(pseudo_inv) # Solve inverse problem
+
+        A_full[:,:,tp] = A
+        X_hat = A.dot(S) # Get EEG activity explained by conditions
+        X_full_recon[:,:,tp] = X_hat.T # Add to reconstructed EEG
+        X_residuals[:,:,tp] = X.T-X_hat.T # Add residuals to residuals EEG
 
     # Create epochs array for the reconstructed EEG, as well as for the residuals:
-    epochs_recon_fit = mne.EpochsArray(X_full_recon, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, reject=epochs.reject, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
+    epochs_recon_fit = mne.EpochsArray(X_full_recon, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
 
-    epochs_recon_res = mne.EpochsArray(X_residuals, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, reject=epochs.reject, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
+    epochs_recon_res = mne.EpochsArray(X_residuals, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
 
     return epochs_recon_fit, epochs_recon_res, A_full
