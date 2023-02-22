@@ -685,15 +685,16 @@ def glm(S, epochs):
     A_full = np.empty((n_channels, n_conditions, n_timestamps), dtype=float)
     A_full[:] = np.nan
 
+    S = S.T
     pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
     for tp in range(len(epochs.times)):
-        X = X_full[:,:,tp].T # Get data matrix for current timestamp
-        A = X.dot(pseudo_inv) # Solve inverse problem
+        X = X_full[:,:,tp] # Get data matrix for current timestamp
+        A = pseudo_inv.dot(X) # Solve inverse problem
 
-        A_full[:,:,tp] = A
-        X_hat = A.dot(S) # Get EEG activity explained by conditions
-        X_full_recon[:,:,tp] = X_hat.T # Add to reconstructed EEG
-        X_residuals[:,:,tp] = X.T-X_hat.T # Add residuals to residuals EEG
+        A_full[:,:,tp] = A.T
+        X_hat = S.dot(A) # Get EEG activity explained by conditions
+        X_full_recon[:,:,tp] = X_hat # Add to reconstructed EEG
+        X_residuals[:,:,tp] = X-X_hat # Add residuals to residuals EEG
 
     # Create epochs array for the reconstructed EEG, as well as for the residuals:
     epochs_recon_fit = mne.EpochsArray(X_full_recon, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, reject=epochs.reject, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
