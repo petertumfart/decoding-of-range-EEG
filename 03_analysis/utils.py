@@ -601,7 +601,7 @@ def load_raw_file(dirpath, file):
     file = dirpath + '/' + file
     return mne.io.read_raw(file, preload=True)
 
-def create_parameter_matrix(epochs):
+def create_parameter_matrix(epochs, z_scoring=True):
     """
     Creates a parameter matrix for the given epochs.
 
@@ -609,8 +609,13 @@ def create_parameter_matrix(epochs):
                    Each Epochs object represents a segment of EEG data.
     :type epochs: list of mne.Epochs objects
 
+    :param z_scoring: Whether to standardize each parameter by subtracting its mean and dividing by its standard deviation.
+                      Defaults to True.
+    :type z_scoring: bool
+
     :return: The parameter matrix for the given epochs.
              The matrix has shape (5, N), where N is the number of epochs.
+             If `z_scoring` is True, each parameter is standardized by subtracting its mean and dividing by its standard deviation.
              The first row represents the short condition (1 if the marker contains '-s', 0 otherwise).
              The second row represents the long condition (1 if the marker contains '-l', 0 otherwise).
              The third row represents the vertical condition (1 if the marker contains 'BTT' or 'TTB', 0 otherwise).
@@ -637,6 +642,13 @@ def create_parameter_matrix(epochs):
         elif 'LTR' in marker or 'RTL' in marker:
             s_horz[0, epoch] = 1
             s_vert[0, epoch] = 0
+
+    # z-score each parameter if the flag is true:
+    if z_scoring:
+        s_short = (s_short - s_short.mean())/s_short.std()
+        s_long = (s_long - s_long.mean())/s_long.std()
+        s_vert = (s_vert - s_vert.mean())/s_vert.std()
+        s_horz = (s_horz - s_horz.mean())/s_horz.std()
 
     # Return S matrix:
     return np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
