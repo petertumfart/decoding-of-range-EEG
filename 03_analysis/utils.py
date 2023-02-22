@@ -600,3 +600,43 @@ def create_scores_df():
 def load_raw_file(dirpath, file):
     file = dirpath + '/' + file
     return mne.io.read_raw(file, preload=True)
+
+def create_parameter_matrix(epochs):
+    """
+    Creates a parameter matrix for the given epochs.
+
+    :param epochs: A list of MNE-Python Epochs objects.
+                   Each Epochs object represents a segment of EEG data.
+    :type epochs: list of mne.Epochs objects
+
+    :return: The parameter matrix for the given epochs.
+             The matrix has shape (5, N), where N is the number of epochs.
+             The first row represents the short condition (1 if the marker contains '-s', 0 otherwise).
+             The second row represents the long condition (1 if the marker contains '-l', 0 otherwise).
+             The third row represents the vertical condition (1 if the marker contains 'BTT' or 'TTB', 0 otherwise).
+             The fourth row represents the horizontal condition (1 if the marker contains 'LTR' or 'RTL', 0 otherwise).
+             The fifth row represents the intercept (always 1).
+    :rtype: numpy.ndarray
+    """
+    # Create s vectors:
+    s_short, s_long, s_vert, s_horz, s_intercept = np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.ones((1,len(epochs)))
+    s_short[:], s_long[:], s_vert[:], s_horz[:] = np.nan, np.nan, np.nan, np.nan
+
+    for epoch in range(len(epochs)):
+        marker = list(epochs[epoch].event_id.keys())[0]
+        if '-s' in marker:
+            s_short[0, epoch] = 1
+            s_long[0, epoch] = 0
+        elif '-l' in marker:
+            s_short[0, epoch] = 0
+            s_long[0, epoch] = 1
+
+        if 'BTT' in marker or 'TTB' in marker:
+            s_horz[0, epoch] = 0
+            s_vert[0, epoch] = 1
+        elif 'LTR' in marker or 'RTL' in marker:
+            s_horz[0, epoch] = 1
+            s_vert[0, epoch] = 0
+
+    # Return S matrix:
+    return np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
