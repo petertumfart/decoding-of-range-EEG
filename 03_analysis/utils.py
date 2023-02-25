@@ -16,6 +16,7 @@ import datetime
 from datetime import datetime, timezone
 import pickle
 import plotly.express as px
+from sklearn.covariance import LedoitWolf
 
 def split_streams(streams):
     """Seperate the streams from the xdf file into an EEG-stream and a Markers stream.
@@ -600,3 +601,112 @@ def create_scores_df():
 def load_raw_file(dirpath, file):
     file = dirpath + '/' + file
     return mne.io.read_raw(file, preload=True)
+
+def create_parameter_matrix(epochs, z_scoring=True):
+    """
+    Creates a parameter matrix for the given epochs.
+
+    :param epochs: A list of MNE-Python Epochs objects.
+                   Each Epochs object represents a segment of EEG data.
+    :type epochs: list of mne.Epochs objects
+
+    :param z_scoring: Whether to standardize each parameter by subtracting its mean and dividing by its standard deviation.
+                      Defaults to True.
+    :type z_scoring: bool
+
+    :return: The parameter matrix for the given epochs.
+             The matrix has shape (5, N), where N is the number of epochs.
+             If `z_scoring` is True, each parameter is standardized by subtracting its mean and dividing by its standard deviation.
+             The first row represents the short condition (1 if the marker contains '-s', 0 otherwise).
+             The second row represents the long condition (1 if the marker contains '-l', 0 otherwise).
+             The third row represents the vertical condition (1 if the marker contains 'BTT' or 'TTB', 0 otherwise).
+             The fourth row represents the horizontal condition (1 if the marker contains 'LTR' or 'RTL', 0 otherwise).
+             The fifth row represents the intercept (always 1).
+    :rtype: numpy.ndarray
+    """
+    # Create s vectors:
+    s_short, s_long, s_vert, s_horz, s_intercept = np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.ones((1,len(epochs)))
+    s_short[:], s_long[:], s_vert[:], s_horz[:] = np.nan, np.nan, np.nan, np.nan
+
+    for epoch in range(len(epochs)):
+        marker = list(epochs[epoch].event_id.keys())[0]
+        if '-s' in marker:
+            s_short[0, epoch] = 1
+            s_long[0, epoch] = 0
+        elif '-l' in marker:
+            s_short[0, epoch] = 0
+            s_long[0, epoch] = 1
+
+        if 'BTT' in marker or 'TTB' in marker:
+            s_horz[0, epoch] = 0
+            s_vert[0, epoch] = 1
+        elif 'LTR' in marker or 'RTL' in marker:
+            s_horz[0, epoch] = 1
+            s_vert[0, epoch] = 0
+
+    # z-score each parameter if the flag is true:
+    if z_scoring:
+        s_short = (s_short - s_short.mean())/s_short.std()
+        s_long = (s_long - s_long.mean())/s_long.std()
+        s_vert = (s_vert - s_vert.mean())/s_vert.std()
+        s_horz = (s_horz - s_horz.mean())/s_horz.std()
+
+    # Return S matrix:
+    return np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
+
+def glm(S, epochs, shrinkage=False):
+    """
+    Applies a generalized linear model to estimate the contribution of experimental conditions to EEG data.
+
+    :param S: array, shape (n_conditions, n_trials)
+        The matrix of experimental conditions.
+    :param epochs: mne.Epochs
+        The EEG data as an MNE Epochs object.
+
+    :return: tuple of mne.EpochsArray and np.ndarray
+        A tuple containing the reconstructed EEG epochs, residuals epochs, and matrix A of the estimated coefficients.
+        - epochs_recon_fit: mne.EpochsArray
+            The reconstructed EEG epochs.
+        - epochs_recon_res: mne.EpochsArray
+            The residuals epochs.
+        - A_full: np.ndarray
+            The matrix of estimated coefficients.
+    """
+    # Create n_channel x n_trials matrix for each timestamp:
+    X_full = epochs.get_data() # Retrieves the n_trials x n_channels x n_timestamps data
+
+    # Get all dimensions:
+    n_trials, n_channels, n_timestamps = X_full.shape
+    n_conditions = S.shape[0]
+
+    X_full_recon = np.empty(X_full.shape)
+    X_residuals = np.empty(X_full.shape)
+    X_full_recon[:], X_residuals[:] = np.nan, np.nan
+
+    A_full = np.empty((n_channels, n_conditions, n_timestamps), dtype=float)
+    A_full[:] = np.nan
+
+    if shrinkage:
+        cov = LedoitWolf().fit(S.T)
+        Css_inv = np.linalg.inv(cov.covariance_)
+    else:
+        pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
+    for tp in range(len(epochs.times)):
+        X = X_full[:,:,tp].T # Get data matrix for current timestamp
+
+        if shrinkage:
+            A = X.dot(S.T).dot(Css_inv)
+        else:
+            A = X.dot(pseudo_inv) # Solve inverse problem
+
+        A_full[:,:,tp] = A
+        X_hat = A.dot(S) # Get EEG activity explained by conditions
+        X_full_recon[:,:,tp] = X_hat.T # Add to reconstructed EEG
+        X_residuals[:,:,tp] = X.T-X_hat.T # Add residuals to residuals EEG
+
+    # Create epochs array for the reconstructed EEG, as well as for the residuals:
+    epochs_recon_fit = mne.EpochsArray(X_full_recon, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
+
+    epochs_recon_res = mne.EpochsArray(X_residuals, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
+
+    return epochs_recon_fit, epochs_recon_res, A_full
