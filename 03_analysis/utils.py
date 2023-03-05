@@ -695,7 +695,8 @@ def glm(S, epochs, shrinkage=False):
         X = X_full[:,:,tp].T # Get data matrix for current timestamp
 
         if shrinkage:
-            A = X.dot(S.T).dot(Css_inv)
+            Cxs = X.dot(S.T)/np.trace(X.dot(S.T))
+            A = Cxs.dot(Css_inv)
         else:
             A = X.dot(pseudo_inv) # Solve inverse problem
 
