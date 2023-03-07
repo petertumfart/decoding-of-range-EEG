@@ -27,7 +27,7 @@ def xdf_to_fif(src, dst, sbj):
         eeg_stream, marker_stream = _split_streams(streams)
 
         # Replace markers by cleaned markers if the subject is A03:
-        if sbj == 'A03':
+        if (sbj == 'A03') and ('paradigm' in f_name):
             marker_stream = _replace_markers(marker_stream, file)
 
         # Get the eeg data:
