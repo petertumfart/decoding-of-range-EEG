@@ -61,10 +61,10 @@ def filter_fifs(src, dst, sbj, paradigm='paradigm'):
     raw = mne.io.read_raw(file, preload=True)
 
     # Highpass filter:
-    raw = raw.copy().filter(l_freq=0.4, h_freq=None, picks=['eeg'], method='iir')
+    raw = raw.copy().filter(l_freq=0.4, h_freq=None, picks=['eeg', 'eog'], method='iir')
 
     # Notch filter:
-    raw = raw.copy().notch_filter(freqs=[50], picks=['eeg'])
+    raw = raw.copy().notch_filter(freqs=[50], picks=['eeg', 'eog'])
 
     # Store the filtered file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_highpass_notch_filtered_raw.fif'
