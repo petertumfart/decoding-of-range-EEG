@@ -31,3 +31,40 @@ def concat_fifs(src, dst, sbj, paradigm='paradigm'):
     # Store the concatenated raw file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_concatenated_raw.fif'
     concat_raw.save(store_name, overwrite=True)
+
+
+def filter_fifs(src, dst, sbj, paradigm='paradigm'):
+    """
+    Applies highpass and notch filters to a single raw EEG data file, and saves the filtered data in a new file.
+
+    :param src: The directory path containing the original raw EEG data file.
+    :type src: str
+
+    :param dst: The directory path where the filtered EEG data file will be stored.
+    :type dst: str
+
+    :param sbj: The subject identifier for the raw EEG data file.
+    :type sbj: str
+
+    :param paradigm: The task identifier for the raw EEG data file. Default is 'paradigm'.
+    :type paradigm: str
+
+    :return: None
+    :rtype: None
+    """
+
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
+
+    file = src + '/' + f_name
+    raw = mne.io.read_raw(file, preload=True)
+
+    # Highpass filter:
+    raw = raw.copy().filter(l_freq=0.4, h_freq=None, picks=['eeg'], method='iir')
+
+    # Notch filter:
+    raw = raw.copy().notch_filter(freqs=[50], picks=['eeg'])
+
+    # Store the filtered file:
+    store_name = dst + '/' + sbj + '_' + paradigm + '_highpass_notch_filtered_raw.fif'
+    raw.save(store_name, overwrite=True)
