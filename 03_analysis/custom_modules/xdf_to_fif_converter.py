@@ -38,7 +38,10 @@ def xdf_to_fif(src, dst, sbj):
         fs, ch_names, ch_labels, eff_fs = _extract_eeg_infos(eeg_stream)
 
         # Extract the triggers from the marker stream:
-        triggers = _extract_annotations(marker_stream, first_samp=eeg_ts[0])
+        if 'paradigm' in f_name:
+            triggers = _extract_annotations(marker_stream, first_samp=eeg_ts[0], paradigm='paradigm')
+        else:
+            triggers = _extract_annotations(marker_stream, first_samp=eeg_ts[0], paradigm='eye')
 
         # Define MNE annotations
         annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'], orig_time=None)
@@ -138,7 +141,7 @@ def _extract_eeg_infos(stream):
     return sampling_rate, chn_names, labels, effective_sample_frequency
 
 
-def _extract_annotations(mark_stream, first_samp):
+def _extract_annotations(mark_stream, first_samp, paradigm):
     """
     Function to extract the triggers of the marker stream in order to prepare for the annotations.
     :param mark_stream: xdf stream containing the markers and time_stamps
@@ -150,8 +153,11 @@ def _extract_annotations(mark_stream, first_samp):
     # Extract the markers:
     marks = mark_stream['time_series']
 
-    # Fix markers due to bug in paradigm:
-    corrected_markers = _fix_markers(marks)
+    # Fix markers due to bug in paradigm only if paradigm=='paradigm':
+    if paradigm == 'paradigm':
+        corrected_markers = _fix_markers(marks)
+    else:
+        corrected_markers = marks
 
     # Extract the timestamp of the markers and correct them to zero
     marks_ts = mark_stream['time_stamps'] - first_samp
