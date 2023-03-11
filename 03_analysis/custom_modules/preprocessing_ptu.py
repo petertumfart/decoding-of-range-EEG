@@ -166,7 +166,7 @@ def car(src, dst, sbj, paradigm):
     raw = raw.copy().set_eeg_reference(ref_channels='average')
 
     # Store the interpolated raw file:
-    store_name = dst + '/' + sbj + '_' + paradigm + 'car_raw.fif'
+    store_name = dst + '/' + sbj + '_' + paradigm + '_car_raw.fif'
     raw.save(store_name, overwrite=True)
 
 def mark_bad_dataspans(src, dst, sbj, paradigm):
@@ -194,8 +194,24 @@ def mark_bad_dataspans(src, dst, sbj, paradigm):
     raw.annotations.description = _rename_annotations(raw.annotations.description)
 
     # Store the interpolated raw file:
-    store_name = dst + '/' + sbj + '_' + paradigm + 'bad_dataspans_marked_raw.fif'
+    store_name = dst + '/' + sbj + '_' + paradigm + '_bad_dataspans_marked_raw.fif'
     raw.save(store_name, overwrite=True)
+
+def lowpass_filter(src, dst, sbj, paradigm='paradigm'):
+
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
+
+    file = src + '/' + f_name
+    raw = mne.io.read_raw(file, preload=True)
+
+    # Lowpass filter:
+    raw = raw.copy().filter(l_freq=None, h_freq=5.0, picks=['eeg', 'eog'], method='iir')
+
+    # Store the filtered file:
+    store_name = dst + '/' + sbj + '_' + paradigm + '_lowpass_filtered_raw.fif'
+    raw.save(store_name, overwrite=True)
+
 
 
 def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
@@ -218,6 +234,45 @@ def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
 
     # Store the epoched file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_for_outlier_detection_epo.fif'
+    epochs.save(store_name, overwrite=True)
+
+
+def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
+
+    file = src + '/' + f_name
+    raw = mne.io.read_raw(file, preload=True)
+
+    events_from_annot, event_dict = mne.events_from_annotations(raw)
+
+    if cue_aligned:
+        # Define markers of interest
+        markers_of_interest = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+
+        event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
+
+        epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=0.0, tmax=7.0,
+                            baseline=None, reject_by_annotation=True, preload=True, picks=['eeg', 'eog'],
+                            reject=dict(eeg=200e-6 ))
+
+    else:
+        # Looking at indication release:
+        trial_type_markers = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+        period = ['i'] # 'i', 'c' .. indication, cue
+        position = ['l', 'r', 't', 'b', 'c']
+        state = ['1'] # 0,1 .. touch/release
+        markers_of_interest = _generate_markers_of_interest(trial_type_markers, period, position, state)
+
+        event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
+
+        epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=-2.0, tmax=3.5, baseline=None, reject_by_annotation=True, preload=True, picks=['eeg'], reject=dict(eeg=200e-6 ))
+
+    # Downsample to 10 Hz:
+    epochs = epochs.copy().resample(10)
+
+    # Store the epoched file:
+    store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_and_resampled_epo.fif'
     epochs.save(store_name, overwrite=True)
 
 def _get_subset_of_dict(full_dict, keys_of_interest):
@@ -466,3 +521,26 @@ def _get_all_additional_information(subject, csv_file='participant_info.csv'):
     age_at_meas = subject_info['Age_At_Measurement'].values[0]
 
     return meas_date, experimenter, proj_name, subject_info, line_freq, gender, dob, age_at_meas
+
+def _generate_markers_of_interest(trial_type, period, position, state):
+    """
+    Generates markers of interest based on provided parameters
+
+    :param trial_type: A list of trial types
+    :type trial_type: list
+    :param period: A list of periods
+    :type period: list
+    :param position: A list of positions
+    :type position: list
+    :param state: A list of states
+    :type state: list
+    :return: A list of markers of interest
+    :rtype: list
+    """
+    moi = []
+    for tp in trial_type:
+        for per in period:
+            for pos in position:
+                for s in state:
+                    moi.append(tp + '_' + per + pos + s)
+    return moi
