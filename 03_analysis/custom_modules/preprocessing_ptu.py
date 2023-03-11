@@ -5,6 +5,7 @@ import numpy as np
 import datetime
 from datetime import datetime, timezone
 
+
 def concat_fifs(src, dst, sbj, paradigm='paradigm'):
     """
     Concatenates multiple raw.fif files from a single subject and paradigm.
@@ -15,7 +16,8 @@ def concat_fifs(src, dst, sbj, paradigm='paradigm'):
     :param paradigm: str, paradigm name contained in the file names (default is 'paradigm').
     :return: None
 
-    - Searches for all the files in the source directory containing the subject name, 'raw.fif' and the specified paradigm.
+    - Searches for all the files in the source directory containing the subject name, 'raw.fif' and the specified
+     paradigm.
     - Reads each of the selected raw.fif files using MNE-Python's read_raw function.
     - Concatenates the read files into a single raw object using MNE-Python's concatenate_raws function.
     - Saves the concatenated raw object as a new raw.fif file in the destination directory.
@@ -116,7 +118,7 @@ def _get_bads_for_subject(subject, csv_file='bad_channels.csv'):
     channel_counts = subject_df['Bad_channel'].value_counts()
 
     # Select the rows that have a count greater than 1
-    duplicate_bads = list(channel_counts[channel_counts>1].index)
+    duplicate_bads = list(channel_counts[channel_counts > 1].index)
 
     return duplicate_bads
 
@@ -149,13 +151,32 @@ def interpolate_bads(src, dst, sbj, paradigm='paradigm'):
     raw.info['bads'] = bads
 
     # Interpolate bad channels (based on info:
-    raw = raw.copy().interpolate_bads(reset_bads=True)#
+    raw = raw.copy().interpolate_bads(reset_bads=True)
 
     # Store the interpolated raw file:
     store_name = dst + '/' + sbj + '_' + paradigm + 'interpolated_raw.fif'
     raw.save(store_name, overwrite=True)
 
+
 def car(src, dst, sbj, paradigm):
+    """
+    Apply common average reference (CAR) to the raw EEG data and save it.
+
+    :param src: The source directory containing the raw EEG data files.
+    :type src: str
+
+    :param dst: The destination directory where the interpolated raw file will be stored.
+    :type dst: str
+
+    :param sbj: The subject identifier string contained in the filename.
+    :type sbj: str
+
+    :param paradigm: The task paradigm identifier string contained in the filename.
+    :type paradigm: str
+
+    :return: None
+    """
+
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
 
@@ -169,7 +190,26 @@ def car(src, dst, sbj, paradigm):
     store_name = dst + '/' + sbj + '_' + paradigm + '_car_raw.fif'
     raw.save(store_name, overwrite=True)
 
+
 def mark_bad_dataspans(src, dst, sbj, paradigm):
+    """
+    Mark bad data spans in the raw EEG data and save it.
+
+    :param src: The source directory containing the raw EEG data files.
+    :type src: str
+
+    :param dst: The destination directory where the interpolated raw file will be stored.
+    :type dst: str
+
+    :param sbj: The subject identifier string contained in the filename.
+    :type sbj: str
+
+    :param paradigm: The task paradigm identifier string contained in the filename.
+    :type paradigm: str
+
+    :return: None
+    """
+
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
 
@@ -197,7 +237,19 @@ def mark_bad_dataspans(src, dst, sbj, paradigm):
     store_name = dst + '/' + sbj + '_' + paradigm + '_bad_dataspans_marked_raw.fif'
     raw.save(store_name, overwrite=True)
 
+
 def lowpass_filter(src, dst, sbj, paradigm='paradigm'):
+    """
+    Applies a low-pass filter to an EEG file.
+
+    :param src: (str) The directory path of the source file.
+    :param dst: (str) The directory path where the filtered file will be stored.
+    :param sbj: (str) The subject ID.
+    :param paradigm: (str) The experiment paradigm (default: 'paradigm').
+
+    :return: None. The filtered file is saved in the specified directory.
+    :raises: None.
+    """
 
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
@@ -213,8 +265,22 @@ def lowpass_filter(src, dst, sbj, paradigm='paradigm'):
     raw.save(store_name, overwrite=True)
 
 
-
 def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
+    """
+    Epochs the EEG data for outlier detection and stores the epoched file.
+
+    :param src: str
+        The path to the directory where the raw EEG data is stored.
+    :param dst: str
+        The path to the directory where the epoched data will be stored.
+    :param sbj: str
+        The subject identifier.
+    :param paradigm: str, optional (default='paradigm')
+        The identifier for the paradigm used in the experiment.
+
+    :return: None
+    """
+
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
 
@@ -224,13 +290,13 @@ def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
     events_from_annot, event_dict = mne.events_from_annotations(raw)
 
     # Define markers of interest
-    markers_of_interest = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+    markers_of_interest = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
 
     event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
 
     epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=0.0, tmax=7.0,
                         baseline=None, reject_by_annotation=True, preload=True, picks=['eeg', 'eog'],
-                        reject=dict(eeg=200e-6 ))
+                        reject=dict(eeg=200e-6))
 
     # Store the epoched file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_for_outlier_detection_epo.fif'
@@ -238,6 +304,24 @@ def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
 
 
 def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
+    """
+    Reads in the raw EEG data from a file, epochs it based on markers of interest, and then downsamples the resulting
+    epochs to 10 Hz before saving the result to a new file.
+
+    :param src: str
+        The path to the directory where the raw EEG data file is located.
+    :param dst: str
+        The path to the directory where the epoched and resampled file will be saved.
+    :param sbj: str
+        The subject identifier to use when creating the file name.
+    :param paradigm: str (default='paradigm')
+        The paradigm identifier to use when creating the file name.
+    :param cue_aligned: bool (default=True)
+        A flag indicating whether the epoching should be cue-aligned or indication-aligned.
+
+    :return: None
+    """
+
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
 
@@ -248,25 +332,26 @@ def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
 
     if cue_aligned:
         # Define markers of interest
-        markers_of_interest = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+        markers_of_interest = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
 
         event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
 
         epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=0.0, tmax=7.0,
                             baseline=None, reject_by_annotation=True, preload=True, picks=['eeg', 'eog'],
-                            reject=dict(eeg=200e-6 ))
+                            reject=dict(eeg=200e-6))
 
     else:
         # Looking at indication release:
-        trial_type_markers = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
-        period = ['i'] # 'i', 'c' .. indication, cue
+        trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+        period = ['i']  # 'i', 'c' .. indication, cue
         position = ['l', 'r', 't', 'b', 'c']
-        state = ['1'] # 0,1 .. touch/release
+        state = ['1']  # 0,1 .. touch/release
         markers_of_interest = _generate_markers_of_interest(trial_type_markers, period, position, state)
 
         event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
 
-        epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=-2.0, tmax=3.5, baseline=None, reject_by_annotation=True, preload=True, picks=['eeg'], reject=dict(eeg=200e-6 ))
+        epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=-2.0, tmax=3.5, baseline=None,
+                            reject_by_annotation=True, preload=True, picks=['eeg'], reject=dict(eeg=200e-6))
 
     # Downsample to 10 Hz:
     epochs = epochs.copy().resample(10)
@@ -275,11 +360,24 @@ def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
     store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_and_resampled_epo.fif'
     epochs.save(store_name, overwrite=True)
 
+
 def _get_subset_of_dict(full_dict, keys_of_interest):
     return dict((k, full_dict[k]) for k in keys_of_interest if k in full_dict)
 
 
 def vis_epochs_for_sbj(src, sbj):
+    """
+    Reads in the epoched EEG data from a file and returns it.
+
+    :param src: str
+        The path to the directory where the epoched EEG data file is located.
+    :param sbj: str
+        The subject identifier used in the file name.
+
+    :return: mne.Epochs
+        The epoched EEG data.
+    """
+
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f)][0]
 
@@ -290,10 +388,23 @@ def vis_epochs_for_sbj(src, sbj):
 
 
 def _create_sliced_trial_list(event_dict, events_from_annot):
+    """
+    Slice the events_from_annot numpy array into a list of trials based on trial type markers.
+
+    :param event_dict: A dictionary with event types as keys and their corresponding values as values.
+    :type event_dict: dict
+
+    :param events_from_annot: A numpy array of shape (n_events, 3) with the third column containing the event type.
+    :type events_from_annot: numpy.ndarray
+
+    :return: A tuple containing the sliced trial list and the first sample values of each trial.
+    :rtype: tuple
+    """
+
     # Slice into list of list from trial_type_marker to trial_type_marker
-    trial_type_markers = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+    trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
     event_dict_trial_type = _get_subset_of_dict(event_dict, trial_type_markers)
-    event_sequence = events_from_annot[:,-1]
+    event_sequence = events_from_annot[:, -1]
 
     trial_list = []
     first_samps = []
@@ -302,13 +413,13 @@ def _create_sliced_trial_list(event_dict, events_from_annot):
         if entry in event_dict_trial_type.values():
             if first_time:
                 temp_list = [entry]
-                first_samps.append(events_from_annot[i,0])
+                first_samps.append(events_from_annot[i, 0])
                 first_time = False
             else:
                 temp_list.append(entry)
                 trial_list.append(temp_list)
                 temp_list = [entry]
-                first_samps.append(events_from_annot[i,0])
+                first_samps.append(events_from_annot[i, 0])
         else:
             if not first_time:
                 temp_list.append(entry)
@@ -316,6 +427,7 @@ def _create_sliced_trial_list(event_dict, events_from_annot):
     trial_list.append(temp_list)
 
     return trial_list, first_samps
+
 
 def _convert_samps_to_time(first_time, first_samp, samp_list):
     """Convert sample numbers to time values.
@@ -325,6 +437,7 @@ def _convert_samps_to_time(first_time, first_samp, samp_list):
     :return: numpy ndarray of time values for the input sample numbers
     """
     return np.array(samp_list) * first_time / first_samp
+
 
 def _get_bad_epochs(event_dict, trial_list):
     """
@@ -347,7 +460,7 @@ def _get_bad_epochs(event_dict, trial_list):
 
     # Check if the order is correct:
     bad_idcs = []
-    trial_type_markers = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+    trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
     trial_vals = [event_dict[key] for key in trial_type_markers]
     n_epochs = len(trial_list)
 
@@ -397,17 +510,18 @@ def _get_bad_epochs(event_dict, trial_list):
             continue
 
         # Add bad epoch if the second two ldr readings are not coherent with the second part of the trial type:
-        if (trial_type[4] == 'l'):
+        if trial_type[4] == 'l':
             if (trial_type[2].lower() != target_touch[2]) or (trial_type[2].lower() != target_release[2]):
                 bad_idcs.append(idx)
                 continue
 
-        if (trial_type[4] == 's'):
+        if trial_type[4] == 's':
             if (target_touch[2] != 'c') or (target_release[2] != 'c'):
                 bad_idcs.append(idx)
                 continue
 
     return bad_idcs
+
 
 def _create_bad_annotations(starting_times, bad_events, duration, orig_time):
     """Create annotations for bad events in EEG data.
@@ -430,54 +544,54 @@ def _create_bad_annotations(starting_times, bad_events, duration, orig_time):
     descriptions = ['bad epoch'] * len(bad_times)
     return mne.Annotations(onsets, durations, descriptions, orig_time=orig_time)
 
+
 def _rename_annotations(descriptions):
     """
-        Rename the annotations of touch/release markers in the form of
-        new_marker = trial_type + period + position + state
-        where trial_type e.g. 'LTR-l'
-        period is either 'i' (indication) or 'c' (cue)
-        position is the position from the marker e.g. the 't' from c t 0
-        state is the touch or release state from the marker e.g. for c t 0 the state is '0' (touch). '1' would be release.
+    Rename the annotations of touch/release markers in the form of new_marker = trial_type + period + position +
+    state where trial_type e.g. 'LTR-l' period is either 'i' (indication) or 'c' (cue) position is the position from
+    the marker e.g. the 't' from c t 0 state is the touch or release state from the marker e.g. for c t 0 the state
+    is '0' (touch). '1' would be release.
 
         :param descriptions: list of strings, annotations to rename
         :return: list of strings, renamed annotations
     """
 
-    trial_type_markers = ['LTR-s', 'LTR-l','RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+    trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
     for i, entry in enumerate(descriptions):
         if entry in trial_type_markers:
             if 'bad' in descriptions[i+1]:
                 continue
             else:
                 trial_type = entry
-                period = 'i' # indication
+                period = 'i'  # indication
                 position = descriptions[i+2][2]
                 state = descriptions[i+2][4]
 
                 descriptions[i+2] = trial_type + '_' + period + position + state
 
                 trial_type = entry
-                period = 'i' # indication
+                period = 'i'  # indication
                 position = descriptions[i+4][2]
                 state = descriptions[i+4][4]
 
                 descriptions[i+4] = trial_type + '_' + period + position + state
 
                 trial_type = entry
-                period = 'c' # cue
+                period = 'c'  # cue
                 position = descriptions[i+5][2]
                 state = descriptions[i+5][4]
 
                 descriptions[i+5] = trial_type + '_' + period + position + state
 
                 trial_type = entry
-                period = 'c' # cue
+                period = 'c'  # cue
                 position = descriptions[i+7][2]
                 state = descriptions[i+7][4]
 
                 descriptions[i+7] = trial_type + '_' + period + position + state
 
     return descriptions
+
 
 def _get_all_additional_information(subject, csv_file='participant_info.csv'):
     """Returns a tuple of additional information for the given subject.
@@ -521,6 +635,7 @@ def _get_all_additional_information(subject, csv_file='participant_info.csv'):
     age_at_meas = subject_info['Age_At_Measurement'].values[0]
 
     return meas_date, experimenter, proj_name, subject_info, line_freq, gender, dob, age_at_meas
+
 
 def _generate_markers_of_interest(trial_type, period, position, state):
     """
