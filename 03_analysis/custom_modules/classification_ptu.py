@@ -84,7 +84,7 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
         scores = cross_val_score(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
 
         # Add row to the dataframe:
-        row_to_add = {'Timepoint': (tp-n_timepoints)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
+        row_to_add = {'Timepoint': (tp-1)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
                       'N_timepoints': n_timepoints, 'Type': epoch_type, 'Init_marker': [markers],
                       't_min': epochs.tmin, 't_max': epochs.tmax, 'epoch_info': [epochs.info],
                       'Date':datetime.now().strftime('%Y-%m-%d'), 'Time': datetime.now().strftime('%H:%M:%S'),
