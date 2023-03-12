@@ -87,7 +87,8 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
         row_to_add = {'Timepoint': (tp-n_timepoints)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
                       'N_timepoints': n_timepoints, 'Type': epoch_type, 'Init_marker': [markers],
                       't_min': epochs.tmin, 't_max': epochs.tmax, 'epoch_info': [epochs.info],
-                      'Date':datetime.now().strftime('%Y-%m-%d'), 'Time': datetime.now().strftime('%H:%M:%S')}
+                      'Date':datetime.now().strftime('%Y-%m-%d'), 'Time': datetime.now().strftime('%H:%M:%S'),
+                      'Condition': condition}
         df_scores = pd.concat([df_scores, pd.DataFrame(row_to_add)], ignore_index=True)
 
         if tp != n_len:
@@ -101,7 +102,7 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
     #               'Subject': ['Mean']*n_len, 'N_timepoints': [n_timepoints]*n_len, 'Type': [epoch_type]*n_len,
     #               'Init_marker': [markers]*n_len, 't_min': [epochs.tmin]*n_len, 't_max': [epochs.tmax]*n_len,
     #               'epoch_info': [[epochs.info]]*n_len, 'Date':[datetime.now().strftime('%Y-%m-%d')]*n_len,
-    #               'Time': [datetime.now().strftime('%H:%M:%S')]*n_len}
+    #               'Time': [datetime.now().strftime('%H:%M:%S')]*n_len, 'Condition': [condition]*n_len]}
 
     # df_scores = pd.concat([df_scores, pd.DataFrame(row_to_add)], ignore_index=True)
 
@@ -121,7 +122,8 @@ def _create_scores_df():
             't_max',
             'epoch_info',
             'Date',
-            'Time']
+            'Time',
+            'Condition']
 
     df = pd.DataFrame(columns=cols)
 
