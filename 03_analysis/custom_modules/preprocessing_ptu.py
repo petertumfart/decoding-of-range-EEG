@@ -2,8 +2,10 @@ import os
 import mne
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import datetime
 from datetime import datetime, timezone
+from scipy.stats import t
 
 
 def concat_fifs(src, dst, sbj, paradigm='paradigm'):
@@ -281,6 +283,7 @@ def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
     :return: None
     """
 
+    mne.set_log_level('INFO')
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
 
@@ -302,8 +305,10 @@ def epoch_for_outlier_detection(src, dst, sbj, paradigm='paradigm'):
     store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_for_outlier_detection_epo.fif'
     epochs.save(store_name, overwrite=True)
 
+    mne.set_log_level('WARNING')
 
-def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
+
+def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True, resample=True):
     """
     Reads in the raw EEG data from a file, epochs it based on markers of interest, and then downsamples the resulting
     epochs to 10 Hz before saving the result to a new file.
@@ -321,6 +326,8 @@ def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
 
     :return: None
     """
+
+    mne.set_log_level('INFO')
 
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
@@ -350,15 +357,18 @@ def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True):
 
         event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
 
-        epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=-2.0, tmax=3.5, baseline=None,
+        epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=-2.5, tmax=3.5, baseline=None,
                             reject_by_annotation=True, preload=True, picks=['eeg'], reject=dict(eeg=200e-6))
 
-    # Downsample to 10 Hz:
-    epochs = epochs.copy().resample(10)
+    if resample:
+        # Downsample to 10 Hz:
+        epochs = epochs.copy().resample(10)
 
     # Store the epoched file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_and_resampled_epo.fif'
     epochs.save(store_name, overwrite=True)
+
+    mne.set_log_level('WARNING')
 
 
 def _get_subset_of_dict(full_dict, keys_of_interest):
@@ -659,3 +669,96 @@ def _generate_markers_of_interest(trial_type, period, position, state):
                 for s in state:
                     moi.append(tp + '_' + per + pos + s)
     return moi
+
+def plot_grand_average(src, sbj_list, paradigm, split=None):
+
+    # Calculate grand average without conditions:
+    if not split:
+        avg = []
+
+    # Retrieve all filenames from the source directory:
+    file_names = [f for f in os.listdir(src)]
+
+    # Create grand_average np array:
+    # grand_avg = np.zeros(())
+
+    evokeds_lst = []
+    for sbj in sbj_list:
+        # Should be only one for each subject:
+        file = src + '/' + [f for f in file_names if (sbj in f)][0]
+
+        epochs = mne.read_epochs(file, preload=True)
+
+        # Append the average activity of each participant shape = (epochs, channels, times):
+        # Averaging all epochs for each timestamp and channel:
+        avg.append(epochs.get_data().mean(axis=0))
+
+        evokeds_lst.append(epochs.average())
+
+    grand_average = mne.combine_evoked(evokeds_lst, weights='equal')
+
+    grand_average.plot()
+    grand_average.pick_types(eeg=True).plot_topo(color='r', legend=False)
+
+    # mne.viz.plot_compare_evokeds(grand_average, picks='Cz', legend=False)
+
+    grand_avg = np.array(avg).mean(axis=0)
+    uppers, lowers = _calc_confidence_interval(avg, sbj_list)
+
+
+    if 'cue_aligned' in src:
+        t_zero = 2.0
+    elif 'movement_aligned' in src:
+        t_zero = 0.0
+
+
+    ch_name = 'Cz'
+    idx = [i for i, name in enumerate(epochs.ch_names) if name == ch_name][0]
+
+    x = np.arange(epochs.tmin, epochs.tmax+1/epochs.info['sfreq'], 1/epochs.info['sfreq'])
+    plt.plot(x, grand_avg[idx, :]*1e6)
+    plt.fill_between(x, lowers[idx, :]*1e6, uppers[idx, :]*1e6, alpha=0.1)
+    # plt.plot(x,grand_avg_short[idx,:]*1e6)
+    # plt.fill_between(x, lowers_short[idx,:]*1e6, uppers_short[idx,:]*1e6, alpha=0.1)
+    plt.plot([t_zero, t_zero], [lowers[idx, :].min()*1e6, uppers[idx, :].max()*1e6], color='black')
+    plt.legend(['Grand_average', '95%-CI', 'Cue presentation'])
+    plt.xlabel('Time (s)')
+    plt.ylabel('Voltage (uV)')
+    plt.title(f'Distance (long vs. short) movement onset aligned on channel {ch_name}')
+    plt.show()
+
+    plt.plot(range(grand_avg.shape[1]), grand_avg[13,:])
+    plt.show()
+
+    # _calc_grand_average([avg])
+
+
+
+    return epochs
+
+def _calc_confidence_interval(avg, sbj_list):
+    n_chan, n_ts = avg[0].shape
+    uppers = np.zeros((n_chan, n_ts))
+    lowers = np.zeros((n_chan, n_ts))
+
+    confidence = .95
+    n_sample = 50
+    for chan in range(n_chan):
+        print(chan, end='\r')
+        for ts in range(n_ts):
+            vals = []
+            for subj in range(len(sbj_list)):
+                vals.append(avg[subj][chan, ts])
+
+            m = np.array(vals).mean()
+            s = np.array(vals).std()
+            dof = len(vals)-1
+
+            t_crit = np.abs(t.ppf((1-confidence)/2,dof))
+
+            lowers[chan, ts], uppers[chan, ts] = (m-s*t_crit/np.sqrt(len(vals)), m+s*t_crit/np.sqrt(len(vals)))
+
+    return uppers, lowers
+
+
+
