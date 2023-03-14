@@ -691,12 +691,21 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
     # Create grand_average np array:
     # grand_avg = np.zeros(())
 
+    diffs_cue_mov = []
+    diffs_cue_fin = []
+    diffs_start_stop = []
+
     evokeds_lst = []
     for sbj in sbj_list:
         # Should be only one for each subject:
         file = src + '/' + [f for f in file_names if (sbj in f)][0]
 
         epochs = mne.read_epochs(file, preload=True)
+
+        diff_cue_release, diff_cue_finished, diff_release_stop = _get_cue_movement_onset_diff(epochs.annotations)
+        diffs_cue_mov += diff_cue_release
+        diffs_cue_fin += diff_cue_finished
+        diffs_start_stop += diff_release_stop
 
         # Get markers:
         markers = list(epochs.event_id.keys())
@@ -747,6 +756,62 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
         lowers_l.append(lowers)
 
 
+    # Get cue, movement onset, movement stop histograms:
+    if 'cue_aligned' in src:
+        # Make "histogram" of difference between movement onset and cue-alignment:
+        bins=np.arange(epochs.tmin, epochs.tmax, 1/epochs.info['sfreq'])
+        diffs_cue_mov = np.array(diffs_cue_mov) + 2.0
+        diffs_cue_fin = np.array(diffs_cue_fin) + 2.0
+
+        hist_cue_mov = np.histogram(diffs_cue_mov, bins=bins, range=None)
+        hist_cue_fin = np.histogram(diffs_cue_fin, bins=bins, range=None)
+
+        l_kernel = 55
+        kernel = _gauss(n=l_kernel, b=0.1*epochs.info['sfreq'])
+
+        smoothed_cue_mov = np.convolve(hist_cue_mov[0], kernel, 'same')
+        smoothed_cue_fin = np.convolve(hist_cue_fin[0], kernel, 'same')
+
+        smoothed_cue_mov = (smoothed_cue_mov - smoothed_cue_mov.min())/ \
+                           (smoothed_cue_mov.max() - smoothed_cue_mov.min())
+        smoothed_cue_fin = (smoothed_cue_fin - smoothed_cue_fin.min())/ \
+                           (smoothed_cue_fin.max() - smoothed_cue_fin.min())
+
+        # plt.plot(x[1:-1], smoothed_cue_mov)
+        # plt.plot(x[1:-1], smoothed_cue_fin)
+        # plt.legend(['Release', 'Touch'],
+        #            prop={'size': 6}, loc='best')
+        # plt.savefig(f'{dst}/difference_between_cue_onset_and_movement_onset.png', dpi=400)
+
+    if 'movement_aligned' in src:
+        # Make "histogram" of difference between movement onset and cue-alignment:
+        bins=np.arange(epochs.tmin, epochs.tmax, 1/epochs.info['sfreq'])
+        diffs_cue_mov = np.array(diffs_cue_mov) * (-1.0)
+        diffs_start_stop = np.array(diffs_start_stop)
+
+        hist_cue_mov = np.histogram(diffs_cue_mov, bins=bins, range=None)
+        hist_start_stop = np.histogram(diffs_start_stop, bins=bins, range=None)
+
+        l_kernel = 55
+        kernel = _gauss(n=l_kernel, b=0.1*epochs.info['sfreq'])
+
+        smoothed_cue_mov = np.convolve(hist_cue_mov[0], kernel, 'same')
+        smoothed_start_stop = np.convolve(hist_start_stop[0], kernel, 'same')
+
+        smoothed_cue_mov = (smoothed_cue_mov - smoothed_cue_mov.min())/ \
+                           (smoothed_cue_mov.max() - smoothed_cue_mov.min())
+        smoothed_start_stop = (smoothed_start_stop - smoothed_start_stop.min())/ \
+                              (smoothed_start_stop.max() - smoothed_start_stop.min())
+
+
+        # plt.plot(x[1:-1], smoothed_cue_mov)
+        # plt.plot(x[1:-1], smoothed_start_stop)
+        # plt.legend(['Cue', 'Touch'],
+        #            prop={'size': 6}, loc='best')
+        # plt.savefig(f'{dst}/difference_between_cue_onset_and_movement_onset.png', dpi=400)
+
+
+
     if 'cue_aligned' in src:
         t_zero = 2.0
         title_alignment = 'cue-aligned'
@@ -756,6 +821,8 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
         title_alignment= 'movement-aligned'
 
 
+
+
     # ch_name = 'Cz'
     # idx = [i for i, name in enumerate(epochs.ch_names) if name == ch_name][0]
 
@@ -763,32 +830,116 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
     for idx, name in enumerate(epochs.ch_names):
         title = f'{title_cond} {title_alignment} {name}'
         legend_text = []
+        fig, ax = plt.subplots(nrows=2, ncols=1, gridspec_kw={'height_ratios': [1, 3]})
         for i, cond in enumerate(split):
-            plt.plot(x, grand_avg[i][idx, :]*1e6)
-            plt.fill_between(x, lowers_l[i][idx, :]*1e6, uppers_l[i][idx, :]*1e6, alpha=0.1)
+            ax[1].plot(x, grand_avg[i][idx, :]*1e6)
+            ax[1].fill_between(x, lowers_l[i][idx, :]*1e6, uppers_l[i][idx, :]*1e6, alpha=0.1)
             legend_text.append(f'Grand_average {cond}')
             legend_text.append('95%-CI')
         # plt.plot(x,grand_avg_short[idx,:]*1e6)
         # plt.fill_between(x, lowers_short[idx,:]*1e6, uppers_short[idx,:]*1e6, alpha=0.1)
-        plt.plot([t_zero, t_zero], [lowers_l[i][idx, :].min()*1e6, uppers_l[i][idx, :].max()*1e6], color='black')
+        ax[1].plot([t_zero, t_zero], [lowers_l[i][idx, :].min()*1e6, uppers_l[i][idx, :].max()*1e6], color='black')
         legend_text.append( 'Cue presentation')
-        plt.legend(legend_text, loc='best', prop={'size': 6})
-        plt.xlabel('Time (s)')
-        plt.ylabel('Voltage (uV)')
-        plt.title(title)
+        ax[1].legend(legend_text, loc='best', prop={'size': 6})
+        ax[1].set_xlabel('Time (s)')
+        ax[1].set_ylabel('Voltage (uV)')
+        fig.suptitle(title)
+
+        if 'cue_aligned' in src:
+            ax[0].plot(x[1:-1], smoothed_cue_mov)
+            ax[0].plot(x[1:-1], smoothed_cue_fin)
+            ax[0].legend(['Release', 'Touch'],
+                       prop={'size': 6}, loc='best')
+
+        if 'movement_aligned' in src:
+            ax[0].plot(x[1:-1], smoothed_cue_mov)
+            ax[0].plot(x[1:-1], smoothed_start_stop)
+            ax[0].legend(['Cue', 'Touch'],
+                       prop={'size': 6}, loc='best')
+
+
         plt.savefig(f'{dst}/grand_average_{name}_{title_alignment}_{title_cond}.png', dpi=400)
-        plt.clf()
+        plt.close('all')
         # plt.show()
+
+
 
 
     # plt.plot(range(grand_avg.shape[1]), grand_avg[13,:])
     # plt.show()
 
     # _calc_grand_average([avg])
-
-
-
     return epochs
+
+def plot_topomaps(src, dst, sbj_list, paradigm, split=[''], times=0.0):
+    # Calculate grand average without conditions:
+    if split == ['']:
+        epochs_lst = [[]]
+        full_epochs = []
+        title_cond = 'All conditions'
+
+    if split == ['long', 'short']:
+        epochs_lst = [[],[]]
+        full_epochs = []
+        title_cond = 'Distance (long v short)'
+
+    if split == ['up', 'down', 'left', 'right']:
+        epochs_lst = [[],[],[],[]]
+        full_epochs = []
+        title_cond = 'Direction (up v down v left v right)'
+
+
+    if 'cue_aligned' in src:
+        title_alignment = 'cue_aligned'
+    if 'movement_aligned' in src:
+        title_alignment = 'movement_aligned'
+
+    # Retrieve all filenames from the source directory:
+    file_names = [f for f in os.listdir(src)]
+
+    evokeds_lst = []
+    for sbj in sbj_list:
+        # Should be only one for each subject:
+        file = src + '/' + [f for f in file_names if (sbj in f)][0]
+
+        epochs = mne.read_epochs(file, preload=True)
+
+        # Get markers:
+        markers = list(epochs.event_id.keys())
+
+        if split == ['']:
+            combined_conditions = [m for m in markers]
+
+        if split == ['long', 'short']:
+            longs = [m for m in markers if '-l' in m]
+            shorts = [m for m in markers if '-s' in m]
+            combined_conditions = []
+            combined_conditions.append(longs)
+            combined_conditions.append(shorts)
+
+        if split == ['up', 'down', 'left', 'right']:
+            ups = [m for m in markers if 'BTT' in m]
+            downs = [m for m in markers if 'TTB' in m]
+            lefts = [m for m in markers if 'RTL' in m]
+            rights = [m for m in markers if 'LTR' in m]
+            combined_conditions = []
+            combined_conditions.append(ups)
+            combined_conditions.append(downs)
+            combined_conditions.append(lefts)
+            combined_conditions.append(rights)
+
+        for i, cond in enumerate(split):
+            epochs_lst[i].append(epochs[combined_conditions[i]])
+
+    for i, cond in enumerate(split):
+        fig = mne.concatenate_epochs(epochs_lst[i]).average().plot_topomap(times, ch_type='eeg',
+                                                                           ncols=10, nrows='auto',
+                                                                           show=False)
+        fig.savefig(f'{dst}/topomaps_{title_alignment}_{cond}_{title_cond}.png', dpi=400)
+
+
+# full_epochs_long.average().plot_topomap(times, ch_type='eeg')
+    # full_epochs_short.average().plot_topomap(times, ch_type='eeg')
 
 def _calc_confidence_interval(avg, sbj_list):
     n_chan, n_ts = avg[0].shape
@@ -814,5 +965,30 @@ def _calc_confidence_interval(avg, sbj_list):
 
     return uppers, lowers
 
+def _get_cue_movement_onset_diff(annot):
+    # Get difference between cue onset and movement onset (*i*1):
+    trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+    cue_times = []
+    release_times = []
+    touch_times = []
+    for i, entry in enumerate(annot.description):
+        if entry in trial_type_markers:
+            if 'bad' in annot.description[i+1]:
+                continue
+            else:
+                # Get delay between cue which is 'Cue' at i+3 and ix1 at i+4 and cx0 at i+5
+                cue_times.append(annot.onset[i+3])
+                release_times.append(annot.onset[i+4])
+                touch_times.append(annot.onset[i+5])
+
+    diff_cue_release = np.array(release_times) - np.array(cue_times)
+    diff_cue_finished = np.array(touch_times) - np.array(cue_times)
+    diff_start_stop = np.array(touch_times) - np.array(release_times)
+
+    return list(diff_cue_release), list(diff_cue_finished), list(diff_start_stop)
+
+def _gauss(n=55,b=1):
+    r = range(-int(n/2),int(n/2)+1)
+    return [np.exp(-float(x)**2/(2*b**2)) for x in r]
 
 
