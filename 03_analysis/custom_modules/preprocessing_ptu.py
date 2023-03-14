@@ -344,7 +344,7 @@ def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True, res
         event_dict_of_interest = _get_subset_of_dict(event_dict, markers_of_interest)
 
         epochs = mne.Epochs(raw, events_from_annot, event_id=event_dict_of_interest, tmin=0.0, tmax=7.0,
-                            baseline=None, reject_by_annotation=True, preload=True, picks=['eeg', 'eog'],
+                            baseline=None, reject_by_annotation=True, preload=True, picks=['eeg'],
                             reject=dict(eeg=200e-6))
 
     else:
@@ -670,11 +670,20 @@ def _generate_markers_of_interest(trial_type, period, position, state):
                     moi.append(tp + '_' + per + pos + s)
     return moi
 
-def plot_grand_average(src, sbj_list, paradigm, split=None):
+def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
 
     # Calculate grand average without conditions:
-    if not split:
-        avg = []
+    if split == ['']:
+        avg = [[]]
+        title_cond = 'All conditions'
+
+    if split == ['long', 'short']:
+        avg = [[],[]]
+        title_cond = 'Distance (long v short)'
+
+    if split == ['up', 'down', 'left', 'right']:
+        avg = [[],[],[],[]]
+        title_cond = 'Direction (up v down v left v right)'
 
     # Retrieve all filenames from the source directory:
     file_names = [f for f in os.listdir(src)]
@@ -689,46 +698,91 @@ def plot_grand_average(src, sbj_list, paradigm, split=None):
 
         epochs = mne.read_epochs(file, preload=True)
 
+        # Get markers:
+        markers = list(epochs.event_id.keys())
+
+        if split == ['']:
+            combined_conditions = [m for m in markers]
+
+        if split == ['long', 'short']:
+            longs = [m for m in markers if '-l' in m]
+            shorts = [m for m in markers if '-s' in m]
+            combined_conditions = []
+            combined_conditions.append(longs)
+            combined_conditions.append(shorts)
+
+        if split == ['up', 'down', 'left', 'right']:
+            ups = [m for m in markers if 'BTT' in m]
+            downs = [m for m in markers if 'TTB' in m]
+            lefts = [m for m in markers if 'RTL' in m]
+            rights = [m for m in markers if 'LTR' in m]
+            combined_conditions = []
+            combined_conditions.append(ups)
+            combined_conditions.append(downs)
+            combined_conditions.append(lefts)
+            combined_conditions.append(rights)
+
         # Append the average activity of each participant shape = (epochs, channels, times):
         # Averaging all epochs for each timestamp and channel:
-        avg.append(epochs.get_data().mean(axis=0))
 
-        evokeds_lst.append(epochs.average())
+        for i, cond in enumerate(split):
+            avg[i].append(epochs[combined_conditions[i]].get_data().mean(axis=0))
 
-    grand_average = mne.combine_evoked(evokeds_lst, weights='equal')
+        # evokeds_lst.append(epochs.average())
 
-    grand_average.plot()
-    grand_average.pick_types(eeg=True).plot_topo(color='r', legend=False)
+    # grand_average = mne.combine_evoked(evokeds_lst, weights='equal')
+
+    # grand_average.plot()
+    # grand_average.pick_types(eeg=True).plot_topo(color='r', legend=False)
 
     # mne.viz.plot_compare_evokeds(grand_average, picks='Cz', legend=False)
 
-    grand_avg = np.array(avg).mean(axis=0)
-    uppers, lowers = _calc_confidence_interval(avg, sbj_list)
+    grand_avg = []
+    uppers_l = []
+    lowers_l = []
+    for i, cond in enumerate(split):
+        grand_avg.append(np.array(avg[i]).mean(axis=0))
+        uppers, lowers = _calc_confidence_interval(avg[i], sbj_list)
+        uppers_l.append(uppers)
+        lowers_l.append(lowers)
 
 
     if 'cue_aligned' in src:
         t_zero = 2.0
+        title_alignment = 'cue-aligned'
+
     elif 'movement_aligned' in src:
         t_zero = 0.0
+        title_alignment= 'movement-aligned'
 
 
-    ch_name = 'Cz'
-    idx = [i for i, name in enumerate(epochs.ch_names) if name == ch_name][0]
+    # ch_name = 'Cz'
+    # idx = [i for i, name in enumerate(epochs.ch_names) if name == ch_name][0]
 
     x = np.arange(epochs.tmin, epochs.tmax+1/epochs.info['sfreq'], 1/epochs.info['sfreq'])
-    plt.plot(x, grand_avg[idx, :]*1e6)
-    plt.fill_between(x, lowers[idx, :]*1e6, uppers[idx, :]*1e6, alpha=0.1)
-    # plt.plot(x,grand_avg_short[idx,:]*1e6)
-    # plt.fill_between(x, lowers_short[idx,:]*1e6, uppers_short[idx,:]*1e6, alpha=0.1)
-    plt.plot([t_zero, t_zero], [lowers[idx, :].min()*1e6, uppers[idx, :].max()*1e6], color='black')
-    plt.legend(['Grand_average', '95%-CI', 'Cue presentation'])
-    plt.xlabel('Time (s)')
-    plt.ylabel('Voltage (uV)')
-    plt.title(f'Distance (long vs. short) movement onset aligned on channel {ch_name}')
-    plt.show()
+    for idx, name in enumerate(epochs.ch_names):
+        title = f'{title_cond} {title_alignment} {name}'
+        legend_text = []
+        for i, cond in enumerate(split):
+            plt.plot(x, grand_avg[i][idx, :]*1e6)
+            plt.fill_between(x, lowers_l[i][idx, :]*1e6, uppers_l[i][idx, :]*1e6, alpha=0.1)
+            legend_text.append(f'Grand_average {cond}')
+            legend_text.append('95%-CI')
+        # plt.plot(x,grand_avg_short[idx,:]*1e6)
+        # plt.fill_between(x, lowers_short[idx,:]*1e6, uppers_short[idx,:]*1e6, alpha=0.1)
+        plt.plot([t_zero, t_zero], [lowers_l[i][idx, :].min()*1e6, uppers_l[i][idx, :].max()*1e6], color='black')
+        legend_text.append( 'Cue presentation')
+        plt.legend(legend_text, loc='best', prop={'size': 6})
+        plt.xlabel('Time (s)')
+        plt.ylabel('Voltage (uV)')
+        plt.title(title)
+        plt.savefig(f'{dst}/grand_average_{name}_{title_alignment}_{title_cond}.png', dpi=400)
+        plt.clf()
+        # plt.show()
 
-    plt.plot(range(grand_avg.shape[1]), grand_avg[13,:])
-    plt.show()
+
+    # plt.plot(range(grand_avg.shape[1]), grand_avg[13,:])
+    # plt.show()
 
     # _calc_grand_average([avg])
 
