@@ -670,7 +670,7 @@ def _generate_markers_of_interest(trial_type, period, position, state):
                     moi.append(tp + '_' + per + pos + s)
     return moi
 
-def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
+def plot_grand_average(src, dst, sbj_list, paradigm, split=[''], plot_topo=False):
 
     # Calculate grand average without conditions:
     if split == ['']:
@@ -737,12 +737,16 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
         for i, cond in enumerate(split):
             avg[i].append(epochs[combined_conditions[i]].get_data().mean(axis=0))
 
-        # evokeds_lst.append(epochs.average())
+        evokeds_lst.append(epochs.average())
 
-    # grand_average = mne.combine_evoked(evokeds_lst, weights='equal')
+
 
     # grand_average.plot()
-    # grand_average.pick_types(eeg=True).plot_topo(color='r', legend=False)
+    if plot_topo:
+        grand_average = mne.combine_evoked(evokeds_lst, weights='equal')
+        fig = grand_average.pick_types(eeg=True).plot_topo(color='r', legend=False)
+        fig.savefig(f'{dst}/topoplot_{cond}_{title_cond}.png', dpi=400)
+        return
 
     # mne.viz.plot_compare_evokeds(grand_average, picks='Cz', legend=False)
 
@@ -843,6 +847,7 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
         ax[1].legend(legend_text, loc='best', prop={'size': 6})
         ax[1].set_xlabel('Time (s)')
         ax[1].set_ylabel('Voltage (uV)')
+        ax[1].set_xlim([x[0], x[-1]])
         fig.suptitle(title)
 
         if 'cue_aligned' in src:
@@ -857,7 +862,7 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
             ax[0].legend(['Cue', 'Touch'],
                        prop={'size': 6}, loc='best')
 
-
+        ax[0].set_xlim([x[0], x[-1]])
         plt.savefig(f'{dst}/grand_average_{name}_{title_alignment}_{title_cond}.png', dpi=400)
         plt.close('all')
         # plt.show()
@@ -871,7 +876,7 @@ def plot_grand_average(src, dst, sbj_list, paradigm, split=['']):
     # _calc_grand_average([avg])
     return epochs
 
-def plot_topomaps(src, dst, sbj_list, paradigm, split=[''], times=0.0):
+def plot_topomaps(src, dst, sbj_list, paradigm, split=[''], times=0.0, ncols=8):
     # Calculate grand average without conditions:
     if split == ['']:
         epochs_lst = [[]]
@@ -933,7 +938,7 @@ def plot_topomaps(src, dst, sbj_list, paradigm, split=[''], times=0.0):
 
     for i, cond in enumerate(split):
         fig = mne.concatenate_epochs(epochs_lst[i]).average().plot_topomap(times, ch_type='eeg',
-                                                                           ncols=10, nrows='auto',
+                                                                           ncols=ncols, nrows='auto',
                                                                            show=False)
         fig.savefig(f'{dst}/topomaps_{title_alignment}_{cond}_{title_cond}.png', dpi=400)
 

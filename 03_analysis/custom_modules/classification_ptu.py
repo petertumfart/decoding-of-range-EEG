@@ -125,13 +125,14 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
 
     conf_mat = []
 
-    for sbj in sbj_list:
+    for j, sbj in enumerate(sbj_list):
         # Should be only one for each subject:
         file = src + '/' + [f for f in file_names if (sbj in f)][0]
 
         epochs = mne.read_epochs(file, preload=True)
 
         if condition == 'distance':
+            vmax = 0.5
             # Only made for one condition for now:
             markers = list(epochs.event_id.keys())
             longs = [m for m in markers if '-l' in m]
@@ -144,12 +145,13 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
             y = np.concatenate([np.zeros(len(epochs_long)), np.ones(len(epochs_short))])
 
         elif condition == 'direction':
+            vmax = 0.25
             # Only made for one condition for now:
             markers = list(epochs.event_id.keys())
-            ups = [m for m in markers if 'BT' in m]
-            downs = [m for m in markers if 'TT' in m]
-            lefts = [m for m in markers if 'RT' in m]
-            rights = [m for m in markers if 'LT' in m]
+            ups = [m for m in markers if 'BTT-l' in m]
+            downs = [m for m in markers if 'TTB-l' in m]
+            lefts = [m for m in markers if 'RTL-l' in m]
+            rights = [m for m in markers if 'LTR-l' in m]
             epochs_up = epochs[ups]
             epochs_down = epochs[downs]
             epochs_right = epochs[rights]
@@ -159,16 +161,21 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
             X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
             y = np.concatenate([np.zeros(len(epochs_up)), np.ones(len(epochs_down)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left))])
 
-        clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
+        clf = LinearDiscriminantAnalysis(solver='svd')#, shrinkage='auto')
 
         # Get x data for peak sample:
-        peak_sample = int((ts_of_interest - epochs.tmin)*epochs.info['sfreq'])
+        peak_sample = int((ts_of_interest[j] - epochs.tmin)*epochs.info['sfreq'])
+        print(peak_sample)
 
         x = X[:,:,peak_sample-n_timepoints:peak_sample+1]
         x = np.reshape(x, (x.shape[0], x.shape[1]*x.shape[2]))
 
         y_pred = cross_val_predict(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
-        conf_mat.append(confusion_matrix(y, y_pred)/len(epochs))
+        # print(y)
+        # print(y_pred-y)
+        print(y.shape)
+        print(y_pred.shape)
+        conf_mat.append(confusion_matrix(y, y_pred, normalize='all'))#/len(epochs))
 
 
     # Calculate mean conf_mat:
@@ -180,9 +187,9 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
 
     fig, ax = plt.subplots()
     # Using matshow here just because it sets the ticks up nicely. imshow is faster.
-    ax.matshow(mean_conf_mat)
+    ax.matshow(mean_conf_mat, cmap='Greens',  vmin=0, vmax=vmax)
     for (i, j), z in np.ndenumerate(mean_conf_mat):
-        ax.text(j, i, '{:0.1f}'.format(z), ha='center', va='center')
+        ax.text(j, i, '{:0.2f}'.format(z), ha='center', va='center')
 
     # plt.colorbar()
     plt.savefig(f'{dst}/confusion_matrix_{epoch_type}_at_ts_{ts_of_interest}_for_{n_timepoints}_window_{condition}.png', dpi=400)
@@ -441,6 +448,9 @@ def plot_heatmap_of_regr_coeff(src, dst, p_crit=.05):
     ax.set_yticklabels(ch_names)
     ax.xaxis.set_ticks([ts for ts in range(n_ts) if ts % 10 == 0])
     ax.set_xticklabels(x[ts] for ts in range(n_ts) if ts % 10 == 0)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Channels')
+    fig.suptitle(f'Difference between distance and direction\nencoded regression coefficients. p-value={p_crit}')
 
 
 
