@@ -178,7 +178,7 @@ def fit_sgeyesub(src, dst, sbj, paradigm='paradigm'):
 
     # Store the eye artifact subtracted raw file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_eyesubed_raw.fif'
-    raw.save(store_name, overwrite=True)
+    raw_subed.save(store_name, overwrite=True)
 
 
 def car(src, dst, sbj, paradigm):
