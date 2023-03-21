@@ -51,3 +51,27 @@ def calc_eye_derivations(src, dst, sbj):
     # Store the filtered file:
     store_name = dst + '/' + sbj + '_' + 'eye' + '_eog_deriv_added_raw.fif'
     raw.save(store_name, overwrite=True)
+
+
+def lp_filter_derivatives(src, dst, sbj):
+    """
+    This function applies a lowpass filter to the EOG channels of a raw MNE file and saves the filtered file
+    with a new name in a specified directory.
+
+    :param src: A string representing the source directory containing the raw MNE file.
+    :param dst: A string representing the destination directory where the filtered MNE file will be saved.
+    :param sbj: A string representing the subject name used to identify the raw and filtered MNE files.
+    """
+
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f) and ('eye' in f)][0]
+
+    file = src + '/' + f_name
+    raw = mne.io.read_raw(file, preload=True)
+
+    # Lowpass filter:
+    raw = raw.copy().filter(l_freq=None, h_freq=5.0, picks=['eog'], method='iir')
+
+    # Store the filtered file:
+    store_name = dst + '/' + sbj + '_' + 'eye' + '_lp_filtered_raw.fif'
+    raw.save(store_name, overwrite=True)
