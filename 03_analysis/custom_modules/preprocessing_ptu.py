@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import datetime
 from datetime import datetime, timezone
 from scipy.stats import t
+import scipy.io
 
 
 def concat_fifs(src, dst, sbj, paradigm='paradigm'):
@@ -156,7 +157,27 @@ def interpolate_bads(src, dst, sbj, paradigm='paradigm'):
     raw = raw.copy().interpolate_bads(reset_bads=True)
 
     # Store the interpolated raw file:
-    store_name = dst + '/' + sbj + '_' + paradigm + 'interpolated_raw.fif'
+    store_name = dst + '/' + sbj + '_' + paradigm + '_interpolated_raw.fif'
+    raw.save(store_name, overwrite=True)
+
+def fit_sgeyesub(src, dst, sbj, paradigm='paradigm'):
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
+
+    file = src + '/' + f_name
+    raw = mne.io.read_raw(file, preload=True)
+
+    # Load eyesub matrtix:
+    C = scipy.io.loadmat(f'dataframes/preprocessing/{sbj}_C.mat')['C']
+
+    raw_subed = raw.copy()
+    eeg_channels = mne.pick_types(raw_subed.info, meg=False, eeg=True, stim=False, eog=False, exclude='bads')
+
+    # Multiply the custom matrix to EEG channels in the data
+    raw_subed._data[eeg_channels, :] = np.dot(C, raw_subed._data[eeg_channels, :])
+
+    # Store the eye artifact subtracted raw file:
+    store_name = dst + '/' + sbj + '_' + paradigm + '_eyesubed_raw.fif'
     raw.save(store_name, overwrite=True)
 
 

@@ -1,6 +1,7 @@
 import os
 import mne
 import numpy as np
+from eeglabio.utils import export_mne_raw, export_mne_epochs
 import matplotlib.pyplot as plt
 import datetime
 from datetime import datetime, timezone
@@ -53,7 +54,7 @@ def calc_eye_derivations(src, dst, sbj):
     raw.save(store_name, overwrite=True)
 
 
-def lp_filter_derivatives(src, dst, sbj):
+def lp_filter_derivatives(src, dst, sbj, export=False):
     """
     This function applies a lowpass filter to the EOG channels of a raw MNE file and saves the filtered file
     with a new name in a specified directory.
@@ -76,8 +77,12 @@ def lp_filter_derivatives(src, dst, sbj):
     store_name = dst + '/' + sbj + '_' + 'eye' + '_lp_filtered_raw.fif'
     raw.save(store_name, overwrite=True)
 
+    if export:
+        set_name = store_name[:-3] + 'set'
+        export_mne_raw(raw, set_name)#, precision='double')
 
-def epoch_eye_paradigm(src, dst, sbj, mrks):
+
+def epoch_eye_paradigm(src, dst, sbj, mrks, export=False):
     """
    Epoch the EEG data for a given subject in the eye paradigm.
 
@@ -110,11 +115,19 @@ def epoch_eye_paradigm(src, dst, sbj, mrks):
                         baseline=None, reject_by_annotation=True, preload=True, picks=['eeg', 'eog'])
 
     # Store the epoched file:
-    store_name = dst + '/' + sbj + '_' + 'eye' + '_epoched_for_eyesub.fif'
+    store_name = dst + '/' + sbj + '_' + 'eye' + '_epoched_for_eyesub_epo.fif'
     epochs.save(store_name, overwrite=True)
+
+    if export:
+        set_name = store_name[:-3] + 'set'
+        export_mne_epochs(epochs, set_name)#, precision='double')
 
     mne.set_log_level('WARNING')
 
 
 def _get_subset_of_dict(full_dict, keys_of_interest):
     return dict((k, full_dict[k]) for k in keys_of_interest if k in full_dict)
+
+def util_detect_saccades_and_blinks():
+    pass
+
