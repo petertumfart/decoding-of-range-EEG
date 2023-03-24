@@ -120,8 +120,8 @@ def _get_bads_for_subject(subject, csv_file='bad_channels.csv'):
     # Get the counts of all the unique values in the 'column_name' column
     channel_counts = subject_df['Bad_channel'].value_counts()
 
-    # Select the rows that have a count greater than 1
-    duplicate_bads = list(channel_counts[channel_counts > 1].index)
+    # Select the rows that have a count greater than 0:
+    duplicate_bads = list(channel_counts[channel_counts > 0].index)
 
     return duplicate_bads
 
@@ -417,6 +417,27 @@ def vis_epochs_for_sbj(src, sbj):
 
     return epochs
 
+
+def vis_raw_for_sbj(src, sbj):
+    """
+    Reads in the raw EEG data from a file and returns it.
+
+    :param src: str
+        The path to the directory where the epoched EEG data file is located.
+    :param sbj: str
+        The subject identifier used in the file name.
+
+    :return: mne.raw
+        The raw EEG data.
+    """
+
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f)][0]
+
+    file = src + '/' + f_name
+    epochs = mne.io.read_raw(file, preload=True)
+
+    return epochs
 
 def _create_sliced_trial_list(event_dict, events_from_annot):
     """
