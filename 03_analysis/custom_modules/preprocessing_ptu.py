@@ -152,6 +152,7 @@ def interpolate_bads(src, dst, sbj, paradigm='paradigm'):
 
     # Add the bad channels to the raw.info:
     raw.info['bads'] = bads
+    print(bads)
 
     # Interpolate bad channels (based on info:
     raw = raw.copy().interpolate_bads(reset_bads=True)
@@ -1037,5 +1038,19 @@ def _get_cue_movement_onset_diff(annot):
 def _gauss(n=55,b=1):
     r = range(-int(n/2),int(n/2)+1)
     return [np.exp(-float(x)**2/(2*b**2)) for x in r]
+
+
+def vis_for_annotation(src, dst):
+    sbj_to_vis = 'A01'
+
+    # Visualize raw for subject:
+    raw = prep.vis_raw_for_sbj(src=src_path, sbj=sbj_to_vis)
+    raw.plot()
+
+    # Store raw with bad epochs marked:
+    # Store the epoched file:
+    # store_name = dst_path + '/' + sbj_to_vis + '_' + 'paradigm' + '_bad_epochs_added_raw.fif'
+    # raw.save(store_name, overwrite=True)
+
 
 
