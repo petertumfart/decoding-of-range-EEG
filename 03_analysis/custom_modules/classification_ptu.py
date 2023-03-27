@@ -82,10 +82,12 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
     clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
     n_len = X.shape[2] - n_timepoints + 1
     for tp in range(n_timepoints, X.shape[2]+1):
-        x = X[:,:,tp-n_timepoints:tp+1]
+        x = X[:,:,tp-n_timepoints:tp]
+        print(x.shape, end='\r')
         x = np.reshape(x, (x.shape[0], x.shape[1]*x.shape[2]))
 
         scores = cross_val_score(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
+
 
         # Add row to the dataframe:
         row_to_add = {'Timepoint': (tp-1)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
@@ -341,6 +343,7 @@ def _fit_glm(S, epochs, shrinkage=False):
     if shrinkage:
         cov = LedoitWolf().fit(S.T)
         Css_inv = np.linalg.inv(cov.covariance_)
+        print(f'Shrinkege param: {cov.shrinkage_}')
     else:
         pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
     for tp in range(len(epochs.times)):
@@ -459,6 +462,109 @@ def plot_heatmap_of_regr_coeff(src, dst, p_crit=.05):
     plt.close('all')
 
 
+
+def classify_single_channel(src, dst, sbj, condition, n_timepoints=1):
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f)][0]
+
+    file = src + '/' + f_name
+    epochs = mne.read_epochs(file, preload=True)
+
+    df_scores = _create_scores_df()
+
+    if 'cue' in src:
+        epoch_type = 'cue-aligned'
+    elif 'movement' in src:
+        epoch_type = 'movement_aligned'
+
+    markers = list(epochs.event_id.keys())
+    if condition == 'distance':
+        longs = [m for m in markers if '-l' in m]
+        shorts = [m for m in markers if '-s' in m]
+        epochs_long = epochs[longs]
+        epochs_short = epochs[shorts]
+
+        # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
+        X = np.concatenate([epochs_long.get_data(), epochs_short.get_data()])
+        y = np.concatenate([np.zeros(len(epochs_long)), np.ones(len(epochs_short))])
+
+    elif condition == 'direction':
+        # Get condition:
+        ups = [m for m in markers if 'BT' in m]
+        downs = [m for m in markers if 'TT' in m]
+        lefts = [m for m in markers if 'RT' in m]
+        rights = [m for m in markers if 'LT' in m]
+        epochs_up = epochs[ups]
+        epochs_down = epochs[downs]
+        epochs_right = epochs[rights]
+        epochs_left = epochs[lefts]
+
+        # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
+        X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
+        y = np.concatenate([np.zeros(len(epochs_up)), np.ones(len(epochs_down)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left))])
+
+    elif condition == 'direction_short':
+        ups = [m for m in markers if 'BTT-s' in m]
+        downs = [m for m in markers if 'TTB-s' in m]
+        lefts = [m for m in markers if 'RTL-s' in m]
+        rights = [m for m in markers if 'LTR-s' in m]
+        epochs_up = epochs[ups]
+        epochs_down = epochs[downs]
+        epochs_right = epochs[rights]
+        epochs_left = epochs[lefts]
+
+        # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
+        X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
+        y = np.concatenate([np.zeros(len(epochs_up)), np.ones(len(epochs_down)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left))])
+
+    elif condition == 'direction_long':
+        ups = [m for m in markers if 'BTT-l' in m]
+        downs = [m for m in markers if 'TTB-l' in m]
+        lefts = [m for m in markers if 'RTL-l' in m]
+        rights = [m for m in markers if 'LTR-l' in m]
+        epochs_up = epochs[ups]
+        epochs_down = epochs[downs]
+        epochs_right = epochs[rights]
+        epochs_left = epochs[lefts]
+
+        # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
+        X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
+        y = np.concatenate([np.zeros(len(epochs_up)), np.ones(len(epochs_down)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left))])
+
+    clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
+    n_len = X.shape[2] - n_timepoints + 1
+    for tp in range(n_timepoints, X.shape[2]+1):
+        for ch in range(X.shape[1]):
+            x = X[:,ch,tp-n_timepoints:tp]
+            # x = np.reshape(x, (x.shape[0], x.shape[1]*x.shape[2]))
+            print(x.shape, end='\r')
+            scores = cross_val_score(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
+
+            # Add row to the dataframe:
+            row_to_add = {'Timepoint': (tp-1)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
+                          'N_timepoints': ch, 'Type': epoch_type, 'Init_marker': [markers],
+                          't_min': epochs.tmin, 't_max': epochs.tmax, 'epoch_info': [epochs.info],
+                          'Date':datetime.now().strftime('%Y-%m-%d'), 'Time': datetime.now().strftime('%H:%M:%S'),
+                          'Condition': condition}
+            df_scores = pd.concat([df_scores, pd.DataFrame(row_to_add)], ignore_index=True)
+
+        if tp != n_len:
+            print(f'Measuring timestamp {tp}/{n_len}', end='\r')
+        else:
+            print(f'Measuring timestamp {tp}/{n_len}')
+
+    # Add mean of scores as subject: Mean:
+    # row_to_add = {'Timepoint': (np.arange(n_timepoints-1, X.shape[2])/10 + epochs.tmin).tolist(),
+    #               'Accuracy': df_scores.groupby('Timepoint')['Accuracy'].mean().to_list(),
+    #               'Subject': ['Mean']*n_len, 'N_timepoints': [n_timepoints]*n_len, 'Type': [epoch_type]*n_len,
+    #               'Init_marker': [markers]*n_len, 't_min': [epochs.tmin]*n_len, 't_max': [epochs.tmax]*n_len,
+    #               'epoch_info': [[epochs.info]]*n_len, 'Date':[datetime.now().strftime('%Y-%m-%d')]*n_len,
+    #               'Time': [datetime.now().strftime('%H:%M:%S')]*n_len, 'Condition': [condition]*n_len]}
+
+    # df_scores = pd.concat([df_scores, pd.DataFrame(row_to_add)], ignore_index=True)
+
+    # Store dataframe to full classification dataframe:
+    _store_scores_df(df_scores, csv_name='dataframes/classification/classification_single_channel_df.csv')
 
 
 
