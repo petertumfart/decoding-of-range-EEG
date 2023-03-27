@@ -11,7 +11,7 @@ from scipy import stats
 from datetime import datetime, timezone
 
 
-def classify(src, dst, sbj, condition, n_timepoints=1):
+def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f)][0]
 
@@ -83,11 +83,12 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
     n_len = X.shape[2] - n_timepoints + 1
     for tp in range(n_timepoints, X.shape[2]+1):
         x = X[:,:,tp-n_timepoints:tp]
-        print(x.shape, end='\r')
         x = np.reshape(x, (x.shape[0], x.shape[1]*x.shape[2]))
 
-        scores = cross_val_score(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
-
+        if loo:
+            scores = cross_val_score(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
+        else:
+            scores = cross_val_score(clf, x, y, cv=5, n_jobs=-1)
 
         # Add row to the dataframe:
         row_to_add = {'Timepoint': (tp-1)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
@@ -98,9 +99,11 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
         df_scores = pd.concat([df_scores, pd.DataFrame(row_to_add)], ignore_index=True)
 
         if tp != n_len:
-            print(f'Measuring timestamp {tp}/{n_len}', end='\r')
+            print(f'Measuring timestamp {tp}/{n_len}, shape: {x.shape}', end='\r')
         else:
             print(f'Measuring timestamp {tp}/{n_len}')
+
+    print()
 
     # Add mean of scores as subject: Mean:
     # row_to_add = {'Timepoint': (np.arange(n_timepoints-1, X.shape[2])/10 + epochs.tmin).tolist(),
@@ -113,8 +116,10 @@ def classify(src, dst, sbj, condition, n_timepoints=1):
     # df_scores = pd.concat([df_scores, pd.DataFrame(row_to_add)], ignore_index=True)
 
     # Store dataframe to full classification dataframe:
-    _store_scores_df(df_scores, csv_name='dataframes/classification/classification_df.csv')
-
+    if loo:
+        _store_scores_df(df_scores, csv_name='dataframes/classification/classification_df.csv')
+    else:
+        _store_scores_df(df_scores, csv_name='dataframes/classification/classification_df_5_fold.csv')
 
 def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, condition='distance'):
     if 'cue' in src:
@@ -343,7 +348,7 @@ def _fit_glm(S, epochs, shrinkage=False):
     if shrinkage:
         cov = LedoitWolf().fit(S.T)
         Css_inv = np.linalg.inv(cov.covariance_)
-        print(f'Shrinkege param: {cov.shrinkage_}')
+        print(f'Shrinkage param: {cov.shrinkage_}')
     else:
         pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
     for tp in range(len(epochs.times)):
@@ -538,7 +543,7 @@ def classify_single_channel(src, dst, sbj, condition, n_timepoints=1):
             x = X[:,ch,tp-n_timepoints:tp]
             # x = np.reshape(x, (x.shape[0], x.shape[1]*x.shape[2]))
             print(x.shape, end='\r')
-            scores = cross_val_score(clf, x, y, cv=LeaveOneOut(), n_jobs=-1)
+            scores = cross_val_score(clf, x, y, cv=5, n_jobs=-2)
 
             # Add row to the dataframe:
             row_to_add = {'Timepoint': (tp-1)/10 + epochs.tmin, 'Accuracy': scores.mean(), 'Subject': sbj,
