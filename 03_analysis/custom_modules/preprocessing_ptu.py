@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import datetime
 from datetime import datetime, timezone
 from scipy.stats import t
+import scipy.io
 
 
 def concat_fifs(src, dst, sbj, paradigm='paradigm'):
@@ -119,8 +120,8 @@ def _get_bads_for_subject(subject, csv_file='bad_channels.csv'):
     # Get the counts of all the unique values in the 'column_name' column
     channel_counts = subject_df['Bad_channel'].value_counts()
 
-    # Select the rows that have a count greater than 1
-    duplicate_bads = list(channel_counts[channel_counts > 1].index)
+    # Select the rows that have a count greater than 0:
+    duplicate_bads = list(channel_counts[channel_counts > 0].index)
 
     return duplicate_bads
 
@@ -151,13 +152,34 @@ def interpolate_bads(src, dst, sbj, paradigm='paradigm'):
 
     # Add the bad channels to the raw.info:
     raw.info['bads'] = bads
+    print(bads)
 
     # Interpolate bad channels (based on info:
     raw = raw.copy().interpolate_bads(reset_bads=True)
 
     # Store the interpolated raw file:
-    store_name = dst + '/' + sbj + '_' + paradigm + 'interpolated_raw.fif'
+    store_name = dst + '/' + sbj + '_' + paradigm + '_interpolated_raw.fif'
     raw.save(store_name, overwrite=True)
+
+def fit_sgeyesub(src, dst, sbj, paradigm='paradigm'):
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f) and (paradigm in f)][0]
+
+    file = src + '/' + f_name
+    raw = mne.io.read_raw(file, preload=True)
+
+    # Load eyesub matrtix:
+    C = scipy.io.loadmat(f'dataframes/preprocessing/{sbj}_C.mat')['C']
+
+    raw_subed = raw.copy()
+    eeg_channels = mne.pick_types(raw_subed.info, meg=False, eeg=True, stim=False, eog=False, exclude='bads')
+
+    # Multiply the custom matrix to EEG channels in the data
+    raw_subed._data[eeg_channels, :] = np.dot(C, raw_subed._data[eeg_channels, :])
+
+    # Store the eye artifact subtracted raw file:
+    store_name = dst + '/' + sbj + '_' + paradigm + '_eyesubed_raw.fif'
+    raw_subed.save(store_name, overwrite=True)
 
 
 def car(src, dst, sbj, paradigm):
@@ -396,6 +418,27 @@ def vis_epochs_for_sbj(src, sbj):
 
     return epochs
 
+
+def vis_raw_for_sbj(src, sbj):
+    """
+    Reads in the raw EEG data from a file and returns it.
+
+    :param src: str
+        The path to the directory where the epoched EEG data file is located.
+    :param sbj: str
+        The subject identifier used in the file name.
+
+    :return: mne.raw
+        The raw EEG data.
+    """
+
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f)][0]
+
+    file = src + '/' + f_name
+    epochs = mne.io.read_raw(file, preload=True)
+
+    return epochs
 
 def _create_sliced_trial_list(event_dict, events_from_annot):
     """
@@ -995,5 +1038,19 @@ def _get_cue_movement_onset_diff(annot):
 def _gauss(n=55,b=1):
     r = range(-int(n/2),int(n/2)+1)
     return [np.exp(-float(x)**2/(2*b**2)) for x in r]
+
+
+def vis_for_annotation(src, dst):
+    sbj_to_vis = 'A01'
+
+    # Visualize raw for subject:
+    raw = prep.vis_raw_for_sbj(src=src_path, sbj=sbj_to_vis)
+    raw.plot()
+
+    # Store raw with bad epochs marked:
+    # Store the epoched file:
+    # store_name = dst_path + '/' + sbj_to_vis + '_' + 'paradigm' + '_bad_epochs_added_raw.fif'
+    # raw.save(store_name, overwrite=True)
+
 
 
