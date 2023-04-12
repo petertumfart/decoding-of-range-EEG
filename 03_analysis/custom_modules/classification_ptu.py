@@ -2,6 +2,7 @@ import os
 import mne
 import pandas as pd
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import cross_val_score, LeaveOneOut, cross_val_predict
@@ -32,6 +33,18 @@ def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
         epochs_long = epochs[longs]
         epochs_short = epochs[shorts]
 
+        # Equalize epochs:
+        n_long = len(epochs_long)
+        n_short = len(epochs_short)
+
+        min_len = min(n_long, n_short)
+
+        ids_long = sorted(random.sample(range(n_long), k=min_len))
+        ids_short = sorted(random.sample(range(n_short), k=min_len))
+
+        epochs_long = epochs_long[ids_long]
+        epochs_short = epochs_short[ids_short]
+
         # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
         X = np.concatenate([epochs_long.get_data(), epochs_short.get_data()])
         y = np.concatenate([np.zeros(len(epochs_long)), np.ones(len(epochs_short))])
@@ -47,6 +60,24 @@ def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
         epochs_right = epochs[rights]
         epochs_left = epochs[lefts]
 
+        # Equalize epochs:
+        n_up = len(epochs_up)
+        n_down = len(epochs_down)
+        n_left = len(epochs_left)
+        n_right = len(epochs_right)
+
+        min_len = min(n_up, n_down, n_left, n_right)
+
+        ids_top = sorted(random.sample(range(n_up), k=min_len))
+        ids_bot = sorted(random.sample(range(n_down), k=min_len))
+        ids_left = sorted(random.sample(range(n_left), k=min_len))
+        ids_right = sorted(random.sample(range(n_right), k=min_len))
+
+        epochs_up = epochs_up[ids_top]
+        epochs_down = epochs_down[ids_bot]
+        epochs_left = epochs_left[ids_left]
+        epochs_right = epochs_right[ids_right]
+
         # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
         X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
         y = np.concatenate([np.zeros(len(epochs_up)), np.ones(len(epochs_down)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left))])
@@ -60,6 +91,24 @@ def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
         epochs_down = epochs[downs]
         epochs_right = epochs[rights]
         epochs_left = epochs[lefts]
+
+        # Equalize epochs:
+        n_up = len(epochs_up)
+        n_down = len(epochs_down)
+        n_left = len(epochs_left)
+        n_right = len(epochs_right)
+
+        min_len = min(n_up, n_down, n_left, n_right)
+
+        ids_top = sorted(random.sample(range(n_up), k=min_len))
+        ids_bot = sorted(random.sample(range(n_down), k=min_len))
+        ids_left = sorted(random.sample(range(n_left), k=min_len))
+        ids_right = sorted(random.sample(range(n_right), k=min_len))
+
+        epochs_up = epochs_up[ids_top]
+        epochs_down = epochs_down[ids_bot]
+        epochs_left = epochs_left[ids_left]
+        epochs_right = epochs_right[ids_right]
 
         # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
         X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
@@ -75,9 +124,64 @@ def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
         epochs_right = epochs[rights]
         epochs_left = epochs[lefts]
 
+        # Equalize epochs:
+        n_up = len(epochs_up)
+        n_down = len(epochs_down)
+        n_left = len(epochs_left)
+        n_right = len(epochs_right)
+
+        min_len = min(n_up, n_down, n_left, n_right)
+
+        ids_top = sorted(random.sample(range(n_up), k=min_len))
+        ids_bot = sorted(random.sample(range(n_down), k=min_len))
+        ids_left = sorted(random.sample(range(n_left), k=min_len))
+        ids_right = sorted(random.sample(range(n_right), k=min_len))
+
+        epochs_up = epochs_up[ids_top]
+        epochs_down = epochs_down[ids_bot]
+        epochs_left = epochs_left[ids_left]
+        epochs_right = epochs_right[ids_right]
+
         # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
         X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
         y = np.concatenate([np.zeros(len(epochs_up)), np.ones(len(epochs_down)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left))])
+
+    elif condition == 'position':
+        tops = [m for m in markers if 'BTT-l' in m]
+        bottoms = [m for m in markers if 'TTB-l' in m]
+        lefts = [m for m in markers if 'RTL-l' in m]
+        rights = [m for m in markers if 'LTR-l' in m]
+        centers = [m for m in markers if '-s' in m]
+        epochs_top= epochs[tops]
+        epochs_bottom = epochs[bottoms]
+        epochs_right = epochs[rights]
+        epochs_left = epochs[lefts]
+        epochs_center = epochs[centers]
+
+        # Equalize epochs:
+        n_top = len(epochs_top)
+        n_bot = len(epochs_bottom)
+        n_left = len(epochs_left)
+        n_right = len(epochs_right)
+        n_center = len(epochs_center)
+
+        min_len = min(n_top, n_bot, n_left, n_right, n_center)
+
+        ids_top = sorted(random.sample(range(n_top), k=min_len))
+        ids_bot = sorted(random.sample(range(n_bot), k=min_len))
+        ids_left = sorted(random.sample(range(n_left), k=min_len))
+        ids_right = sorted(random.sample(range(n_right), k=min_len))
+        ids_center = sorted(random.sample(range(n_center), k=min_len))
+
+        epochs_top = epochs_top[ids_top]
+        epochs_bottom = epochs_bottom[ids_bot]
+        epochs_left = epochs_left[ids_left]
+        epochs_right = epochs_right[ids_right]
+        epochs_center = epochs_center[ids_center]
+
+        # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
+        X = np.concatenate([epochs_top.get_data(), epochs_bottom.get_data(), epochs_right.get_data(), epochs_left.get_data(), epochs_center.get_data()])
+        y = np.concatenate([np.zeros(len(epochs_top)), np.ones(len(epochs_bottom)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left)), 4*np.ones(len(epochs_center))])
 
     clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
     n_len = X.shape[2] - n_timepoints + 1
@@ -146,6 +250,7 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
             shorts = [m for m in markers if '-s' in m]
             epochs_long = epochs[longs]
             epochs_short = epochs[shorts]
+            labels = ['Long', 'Short']
 
             # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
             X = np.concatenate([epochs_long.get_data(), epochs_short.get_data()])
@@ -155,14 +260,15 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
             vmax = 0.25
             # Only made for one condition for now:
             markers = list(epochs.event_id.keys())
-            ups = [m for m in markers if 'BTT-l' in m]
-            downs = [m for m in markers if 'TTB-l' in m]
-            lefts = [m for m in markers if 'RTL-l' in m]
-            rights = [m for m in markers if 'LTR-l' in m]
+            ups = [m for m in markers if 'BTT-s' in m]
+            downs = [m for m in markers if 'TTB-s' in m]
+            lefts = [m for m in markers if 'RTL-s' in m]
+            rights = [m for m in markers if 'LTR-s' in m]
             epochs_up = epochs[ups]
             epochs_down = epochs[downs]
             epochs_right = epochs[rights]
             epochs_left = epochs[lefts]
+            labels = ['Up', 'Down', 'Right', 'Left']
 
             # Create data matrix X (epochs x channels x timepoints) and label vector y (epochs x 1):
             X = np.concatenate([epochs_up.get_data(), epochs_down.get_data(), epochs_right.get_data(), epochs_left.get_data()])
@@ -198,8 +304,11 @@ def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, con
     for (i, j), z in np.ndenumerate(mean_conf_mat):
         ax.text(j, i, '{:0.2f}'.format(z), ha='center', va='center')
 
+    ax.set_xticklabels(['']+labels)
+    ax.set_yticklabels(['']+labels)
+
     # plt.colorbar()
-    plt.savefig(f'{dst}/confusion_matrix_{epoch_type}_at_ts_{ts_of_interest}_for_{n_timepoints}_window_{condition}.png', dpi=400)
+    plt.savefig(f'{dst}/confusion_matrix_{epoch_type}_at_ts_{ts_of_interest}_for_{n_timepoints}_window_{condition}_short_cue.png', dpi=400)
     plt.clf()
     plt.close()
 
@@ -373,7 +482,7 @@ def _fit_glm(S, epochs, shrinkage=False):
     return epochs_recon_fit, epochs_recon_res, A_full
 
 
-def coefficient_testing(src, dst, sbj_list):
+def coefficient_testing(src, dst, sbj_list, two_sample=True):
     # Retrieve all filenames from the source directory:
     file_names = [f for f in os.listdir(src)]
 
@@ -410,8 +519,13 @@ def coefficient_testing(src, dst, sbj_list):
 
             rvs1 = [A[i][chan, 1, ts] for i in range(len(sbj_list))]
             rvs2 = [A[i][chan, 2, ts] for i in range(len(sbj_list))]
-            # Calculate t-test for coeff[1] vs coeff[2] (distance vs. direction):
-            stat[chan,ts], p_val[chan, ts] = stats.ttest_ind(rvs1, rvs2)
+
+            if two_sample:
+                # Calculate t-test for coeff[1] vs coeff[2] (distance vs. direction):
+                stat[chan,ts], p_val[chan, ts] = stats.ttest_ind(rvs1, rvs2)
+            else:
+                stat[chan,ts], p_val[chan, ts] = stats.ttest_1samp(rvs2, popmean=0)
+
 
     # Save bootstrapping matrices:
     np.save(f'{dst}/regr_coeff_global_means.npy', means)    # .npy extension is added if not given
