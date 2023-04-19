@@ -10,6 +10,9 @@ import scipy.io
 from scipy.stats import wilcoxon, ttest_ind
 import random
 import time
+from multiprocessing import Process, Manager, Pool
+import sys
+from itertools import repeat
 
 
 def _create_condition_list(id):
@@ -22,6 +25,7 @@ def _create_condition_list(id):
             return ['Up-dir', 'Down-dir', 'Left-dir', 'Right-dir']
         case 3:
             return ['Top-pos', 'Bottom-pos', 'Left-pos', 'Right-pos', 'Center-pos']
+
 
 
 def _get_combined_condition_idcs(id, markers):
@@ -51,8 +55,25 @@ def _get_combined_condition_idcs(id, markers):
 
     return combined_conditions
 
+def _bootstrap_ptu(vals):
+    return np.random.choice(vals, size=len(vals), replace=True).mean()
 
-def _calc_confidence_interval(avg, bootstrap=True):
+def ci_calc(chan, n_ts, avg):
+    n_bootstrap = 1000
+    n_sbj = len(avg)
+    confidence = .95
+    ch_ci = np.zeros((2,n_ts)) # First entry is uppers, second entry is lowers
+    for ts in range(n_ts):
+        vals = []
+        for subj in range(n_sbj):
+            vals.append(avg[subj][chan, ts])
+
+        # Bootstrapping for confidence interval:
+        values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
+        ch_ci[1,ts], ch_ci[0,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
+    return ch_ci
+
+def _calc_confidence_interval(avg, bootstrap=True, multiproc=True):
     n_bootstrap = 1000
     n_chan, n_ts = avg[0].shape
     n_sbj = len(avg)
@@ -60,28 +81,78 @@ def _calc_confidence_interval(avg, bootstrap=True):
     lowers = np.zeros((n_chan, n_ts))
 
     confidence = .95
-    for chan in range(n_chan):
-        start = time.time()
-        for ts in range(n_ts):
-            vals = []
-            for subj in range(n_sbj):
-                vals.append(avg[subj][chan, ts])
 
-            if bootstrap:
-                # Bootstrapping for confidence interval:
-                values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
-                lowers[chan,ts], uppers[chan,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
-            else:
-                m = np.array(vals).mean()
-                s = np.array(vals).std()
-                dof = len(vals)-1
+    start = time.time()
+    # for chan in range(n_chan):
+    p = Pool(processes=n_chan)
+    channel_ci = p.starmap(ci_calc, zip(range(n_chan), repeat(n_ts), repeat(avg)))
 
-                t_crit = np.abs(t.ppf((1-confidence)/2,dof))
+    # print(len(channel_ci))
+    # Extract ci's:
+    for ch in range(n_chan):
+        # print(channel_ci[0].shape)
+        uppers[ch,:] = channel_ci[ch][0,:]
+        lowers[ch,:] = channel_ci[ch][1,:]
 
-                lowers[chan, ts], uppers[chan, ts] = (m-s*t_crit/np.sqrt(len(vals)), m+s*t_crit/np.sqrt(len(vals)))
-        print(f'One channel took me: {round((time.time()-start),2)} chan: {chan:02}', end='\r')
+    # p.map(ci_calc, range(n_chan))
+    #     start = time.time()
+    #     for ts in range(n_ts):
+    #         vals = []
+    #         for subj in range(n_sbj):
+    #             vals.append(avg[subj][chan, ts])
+    #
+    #         if bootstrap:
+    #             if multiproc:
+    #                 vals_list = [vals] * 5
+    #                 values = []
+    #                 for i in range(int(n_bootstrap/5)):
+    #                     p = Pool(processes=5)
+    #                     values += p.map(_bootstrap_ptu, vals_list)
+    #                     p.close()
+    #                     print(values)
+    #
+    #                 # print(data)
+    #                 lowers[chan,ts], uppers[chan,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
+    #             else:
+    #                 # Bootstrapping for confidence interval:
+    #                 values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
+    #                 lowers[chan,ts], uppers[chan,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
+    #         else:
+    #             m = np.array(vals).mean()
+    #             s = np.array(vals).std()
+    #             dof = len(vals)-1
+    #
+    #             t_crit = np.abs(t.ppf((1-confidence)/2,dof))
+    #
+    #             lowers[chan, ts], uppers[chan, ts] = (m-s*t_crit/np.sqrt(len(vals)), m+s*t_crit/np.sqrt(len(vals)))
+
+    print(f'One condition took me: {round((time.time()-start),2)}') #, end='\r')
     return uppers, lowers
 
+def do_something():
+    print('Im going to sleep')
+    # time.sleep(1)
+    # print('Im awake')
+
+# def multi_proc_test():
+#     proc_1 = Process(target=do_something)
+#     proc_2 = Process(target=do_something)
+#
+#     proc_1.start()
+#     proc_2.start()
+#
+#     proc_1.join()
+#     proc_2.join()
+#     print('fin')
+
+def job(num):
+    return num * 2
+
+def multi_proc_test():
+    p = Pool(processes=20)
+    data = p.map(job, [i for i in range(20)])
+    p.close()
+    print(data)
 
 def grand_avg_per_subject(src, dst, sbj_list, split_id=0):
     # split_id: 0...['All together']
@@ -169,6 +240,35 @@ def confidence_interval(src, dst, split_id, alignment):
         store_name = f'{dst}/grand-avg-lowers_{alignment}_{cond}.npy'
         np.save(store_name, lowers)
 
+def statistical_analysis(src, dst, split_id, alignment):
+    # List all files with naming convention 'sbj-grand_avg_<sbj>_<alignment>_<condition>
+    type = 'sbj-grand-avg'
+
+    condition_list = _create_condition_list(split_id)
+
+    # combinations = _get_condition_combinations(split_id)
+
+    for cond in condition_list:
+        # Retrieve all filenames from the source directory that contain grand-avg-sbj, conditions and alignment:
+        file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f) and (cond in f)]
+
+        sbj_avg = []
+        for f in file_names:
+            file = src + '/' + f
+            # Read all files and combine to grand average:
+            sbj_avg.append(np.load(file))
+
+
+        # TODO: Implement permutation_tests if necassary
+        #p_vals = _perform_permuation_tests(sbj_avg)
+
+        # Store grand_avg:
+        # store_name = f'{dst}/grand-avg-uppers_{alignment}_{cond}.npy'
+        # np.save(store_name, uppers)
+        # store_name = f'{dst}/grand-avg-lowers_{alignment}_{cond}.npy'
+        # np.save(store_name, lowers)
+
+
 def get_timings(src, dst, sbj_list, split_id):
     # split_id: 0...['All together']
     #           1...['long', 'short']
@@ -195,7 +295,7 @@ def get_timings(src, dst, sbj_list, split_id):
         # Load epochs file:
         epochs = mne.read_epochs(file, preload=True)
 
-        cue_times, release_times, touch_times = _get_cue_movement_onset_diff(epochs.annotations)
+        cue_times, release_times, touch_times = _get_cue_movement_onsets(epochs.annotations)
 
         # Store the subject grand averages:
         store_name = f'{dst}/timings-cue_{sbj}_{alignment}.npy'
@@ -206,7 +306,7 @@ def get_timings(src, dst, sbj_list, split_id):
         np.save(store_name, cue_times)
 
 
-def _get_cue_movement_onset_diff(annot):
+def _get_cue_movement_onsets(annot):
     # Get difference between cue onset and movement onset (*i*1):
     trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
     cue_times = []
@@ -228,6 +328,34 @@ def _get_cue_movement_onset_diff(annot):
 
     #return list(diff_cue_release), list(diff_cue_finished), list(diff_start_stop)
     return np.array(cue_times), np.array(release_times), np.array(touch_times)
+
+
+def classification_mean_and_ci(src, dst):
+    # Get mean and confidence interval from classification dataframe:
+    df = pd.read_csv(f'{src}/classification_df.csv', index_col=0)
+
+    # Calculate CI for all subjects with the same 'N_timepoints', 'Type' and 'Condition' column for each timepoint.
+    cols = ['Timepoint', 'Mean_accuracy', 'Type', 'N_timepoints', 'Condition', 'Upper', 'Lower']
+    confidence = .95
+    df_mean = pd.DataFrame(columns=cols)
+    for type in df['Type'].unique():
+        for n_timepoints in df['N_timepoints'].unique():
+            for condition in df['Condition'].unique():
+                print(f'{type} {condition} {n_timepoints}')
+                timepoints = df[(df['Condition']==condition) & (df['N_timepoints']==n_timepoints) & (df['Type']==type)]['Timepoint'].unique()
+                for tp in timepoints:
+                    # Get average overall subjects for each timepoint:
+                    accs = np.array(df[(df['Type'] == type) & (df['N_timepoints'] == n_timepoints) & (df['Condition'] == condition) & (df['Timepoint'] == tp)]['Accuracy'])
+                    mean = accs.mean()
+
+                    # Bootstrapping for confidence interval:
+                    values = [np.random.choice(accs,size=len(accs),replace=True).mean() for i in range(1000)]
+                    lower, upper = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
+
+                    df_mean.loc[len(df_mean)] = [tp, mean, type, n_timepoints, condition, upper, lower]
+
+    df_mean = df_mean.dropna()
+    df_mean.to_csv(f'{dst}/classification_means_ci.csv')
 
 
 def temporal_processing(src, dst, sbj_list, split=['']):
