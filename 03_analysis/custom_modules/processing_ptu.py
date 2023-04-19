@@ -13,6 +13,7 @@ import time
 from multiprocessing import Process, Manager, Pool
 import sys
 from itertools import repeat
+from sklearn.covariance import LedoitWolf
 
 
 def _create_condition_list(id):
@@ -55,11 +56,8 @@ def _get_combined_condition_idcs(id, markers):
 
     return combined_conditions
 
-def _bootstrap_ptu(vals):
-    return np.random.choice(vals, size=len(vals), replace=True).mean()
-
 def ci_calc(chan, n_ts, avg):
-    n_bootstrap = 1000
+    n_bootstrap = 10000
     n_sbj = len(avg)
     confidence = .95
     ch_ci = np.zeros((2,n_ts)) # First entry is uppers, second entry is lowers
@@ -69,7 +67,8 @@ def ci_calc(chan, n_ts, avg):
             vals.append(avg[subj][chan, ts])
 
         # Bootstrapping for confidence interval:
-        values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
+        values = np.random.choice(vals, size=(len(vals), n_bootstrap)).mean(axis=0)
+        # values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
         ch_ci[1,ts], ch_ci[0,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
     return ch_ci
 
@@ -94,65 +93,9 @@ def _calc_confidence_interval(avg, bootstrap=True, multiproc=True):
         uppers[ch,:] = channel_ci[ch][0,:]
         lowers[ch,:] = channel_ci[ch][1,:]
 
-    # p.map(ci_calc, range(n_chan))
-    #     start = time.time()
-    #     for ts in range(n_ts):
-    #         vals = []
-    #         for subj in range(n_sbj):
-    #             vals.append(avg[subj][chan, ts])
-    #
-    #         if bootstrap:
-    #             if multiproc:
-    #                 vals_list = [vals] * 5
-    #                 values = []
-    #                 for i in range(int(n_bootstrap/5)):
-    #                     p = Pool(processes=5)
-    #                     values += p.map(_bootstrap_ptu, vals_list)
-    #                     p.close()
-    #                     print(values)
-    #
-    #                 # print(data)
-    #                 lowers[chan,ts], uppers[chan,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
-    #             else:
-    #                 # Bootstrapping for confidence interval:
-    #                 values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
-    #                 lowers[chan,ts], uppers[chan,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
-    #         else:
-    #             m = np.array(vals).mean()
-    #             s = np.array(vals).std()
-    #             dof = len(vals)-1
-    #
-    #             t_crit = np.abs(t.ppf((1-confidence)/2,dof))
-    #
-    #             lowers[chan, ts], uppers[chan, ts] = (m-s*t_crit/np.sqrt(len(vals)), m+s*t_crit/np.sqrt(len(vals)))
-
     print(f'One condition took me: {round((time.time()-start),2)}') #, end='\r')
     return uppers, lowers
 
-def do_something():
-    print('Im going to sleep')
-    # time.sleep(1)
-    # print('Im awake')
-
-# def multi_proc_test():
-#     proc_1 = Process(target=do_something)
-#     proc_2 = Process(target=do_something)
-#
-#     proc_1.start()
-#     proc_2.start()
-#
-#     proc_1.join()
-#     proc_2.join()
-#     print('fin')
-
-def job(num):
-    return num * 2
-
-def multi_proc_test():
-    p = Pool(processes=20)
-    data = p.map(job, [i for i in range(20)])
-    p.close()
-    print(data)
 
 def grand_avg_per_subject(src, dst, sbj_list, split_id=0):
     # split_id: 0...['All together']
@@ -331,6 +274,7 @@ def _get_cue_movement_onsets(annot):
 
 
 def classification_mean_and_ci(src, dst):
+    start = time.time()
     # Get mean and confidence interval from classification dataframe:
     df = pd.read_csv(f'{src}/classification_df.csv', index_col=0)
 
@@ -349,7 +293,9 @@ def classification_mean_and_ci(src, dst):
                     mean = accs.mean()
 
                     # Bootstrapping for confidence interval:
-                    values = [np.random.choice(accs,size=len(accs),replace=True).mean() for i in range(1000)]
+                    n_bootstrap = 10000
+                    values = np.random.choice(accs, size=(len(accs),n_bootstrap), replace=True).mean(axis=0)
+                    # values = [np.random.choice(accs,size=len(accs),replace=True).mean() for i in range(1000)]
                     lower, upper = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
 
                     df_mean.loc[len(df_mean)] = [tp, mean, type, n_timepoints, condition, upper, lower]
@@ -357,6 +303,154 @@ def classification_mean_and_ci(src, dst):
     df_mean = df_mean.dropna()
     df_mean.to_csv(f'{dst}/classification_means_ci.csv')
 
+    print(f'Calculation took me: {time.time() - start}seconds.')
+
+
+def glm(src, dst, sbj):
+    # There can be only one file  with matching conditions since we are splitting in folders:
+    f_name = [f for f in os.listdir(src) if (sbj in f)][0]
+
+    if 'cue_aligned' in src:
+        title_alignment = 'cue_aligned'
+    if 'movement_aligned' in src:
+        title_alignment = 'movement_aligned'
+
+    file = src + '/' + f_name
+    epochs = mne.read_epochs(file, preload=True)
+
+    S = _create_parameter_matrix(epochs, z_scoring=True)
+
+    return(S)
+
+    # _,_,A = _fit_glm(S, epochs, shrinkage=True)
+    #
+    # # Save regression coefficients:
+    # store_name = f'{dst}/{sbj}_regr_coeff_{title_alignment}_shrink.npy'
+    # np.save(store_name, A)
+    #
+    # np.save(f'{dst}/ch_names.npy', np.array(epochs.ch_names))
+
+
+def _create_parameter_matrix(epochs, z_scoring=True):
+    """
+    Creates a parameter matrix for the given epochs.
+
+    :param epochs: A list of MNE-Python Epochs objects.
+                   Each Epochs object represents a segment of EEG data.
+    :type epochs: list of mne.Epochs objects
+
+    :param z_scoring: Whether to standardize each parameter by subtracting its mean and dividing by its standard deviation.
+                      Defaults to True.
+    :type z_scoring: bool
+
+    :return: The parameter matrix for the given epochs.
+             The matrix has shape (5, N), where N is the number of epochs.
+             If `z_scoring` is True, each parameter is standardized by subtracting its mean and dividing by its standard deviation.
+             The first row represents the short condition (1 if the marker contains '-s', 0 otherwise).
+             The second row represents the long condition (1 if the marker contains '-l', 0 otherwise).
+             The third row represents the vertical condition (1 if the marker contains 'BTT' or 'TTB', 0 otherwise).
+             The fourth row represents the horizontal condition (1 if the marker contains 'LTR' or 'RTL', 0 otherwise).
+             The fifth row represents the intercept (always 1).
+    :rtype: numpy.ndarray
+    """
+
+    # Create s vectors:
+    s_short, s_long, s_vert, s_horz, s_intercept = np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.empty((1,len(epochs))), np.ones((1,len(epochs)))
+    s_short[:], s_long[:], s_vert[:], s_horz[:] = np.nan, np.nan, np.nan, np.nan
+
+    for epoch in range(len(epochs)):
+        marker = list(epochs[epoch].event_id.keys())[0]
+        if '-s' in marker:
+            s_short[0, epoch] = 1
+            s_long[0, epoch] = 0
+        elif '-l' in marker:
+            s_short[0, epoch] = 0
+            s_long[0, epoch] = 1
+
+        if 'BTT' in marker or 'TTB' in marker:
+            s_horz[0, epoch] = 0
+            s_vert[0, epoch] = 1
+        elif 'LTR' in marker or 'RTL' in marker:
+            s_horz[0, epoch] = 1
+            s_vert[0, epoch] = 0
+
+    # z-score each parameter if the flag is true:
+    if z_scoring:
+        s_short = (s_short - s_short.mean())/s_short.std()
+        s_long = (s_long - s_long.mean())/s_long.std()
+        s_vert = (s_vert - s_vert.mean())/s_vert.std()
+        s_horz = (s_horz - s_horz.mean())/s_horz.std()
+
+    # Return S matrix:
+    return np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
+
+def _fit_glm(S, epochs, shrinkage=False):
+    """
+    Applies a generalized linear model to estimate the contribution of experimental conditions to EEG data.
+
+    :param S: array, shape (n_conditions, n_trials)
+        The matrix of experimental conditions.
+    :param epochs: mne.Epochs
+        The EEG data as an MNE Epochs object.
+
+    :return: tuple of mne.EpochsArray and np.ndarray
+        A tuple containing the reconstructed EEG epochs, residuals epochs, and matrix A of the estimated coefficients.
+        - epochs_recon_fit: mne.EpochsArray
+            The reconstructed EEG epochs.
+        - epochs_recon_res: mne.EpochsArray
+            The residuals epochs.
+        - A_full: np.ndarray
+            The matrix of estimated coefficients.
+    """
+    # Create n_channel x n_trials matrix for each timestamp:
+    X_full = epochs.get_data() # Retrieves the n_trials x n_channels x n_timestamps data
+
+    # Get all dimensions:
+    n_trials, n_channels, n_timestamps = X_full.shape
+    n_conditions = S.shape[0]
+
+    X_full_recon = np.empty(X_full.shape)
+    X_residuals = np.empty(X_full.shape)
+    X_full_recon[:], X_residuals[:] = np.nan, np.nan
+
+    A_full = np.empty((n_channels, n_conditions, n_timestamps), dtype=float)
+    A_full[:] = np.nan
+
+    if shrinkage:
+        cov = LedoitWolf().fit(S.dot(S.T))
+        Css_inv = np.linalg.inv(cov.covariance_)
+        print(f'Shrinkage param: {cov.shrinkage_}')
+    else:
+        pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
+    for tp in range(len(epochs.times)):
+        X = X_full[:,:,tp].T # Get data matrix for current timestamp
+
+        if shrinkage:
+            #Cxs = X.dot(S.T)/np.trace(X.dot(S.T))
+            Cxs = X.dot(S.T)
+            # Cxs = (X - X.mean(axis=1)) * (S - S.mean(axis=1)).mean(axis)
+
+            # Cxs = np.zeros((n_channels, n_conditions))
+            #
+            # for ch in range(n_channels):
+            #     for con in range(n_conditions):
+            #         Cxs[ch, con] = ((X[ch,:] - X[ch,:].mean()) * (S[con,:] - S[con,:].mean()).T).mean()
+
+            A = Cxs.dot(Css_inv)
+        else:
+            A = X.dot(pseudo_inv) # Solve inverse problem
+
+        A_full[:,:,tp] = A
+        X_hat = A.dot(S) # Get EEG activity explained by conditions
+        X_full_recon[:,:,tp] = X_hat.T # Add to reconstructed EEG
+        X_residuals[:,:,tp] = X.T-X_hat.T # Add residuals to residuals EEG
+
+    # Create epochs array for the reconstructed EEG, as well as for the residuals:
+    epochs_recon_fit = mne.EpochsArray(X_full_recon, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
+
+    epochs_recon_res = mne.EpochsArray(X_residuals, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
+
+    return epochs_recon_fit, epochs_recon_res, A_full
 
 def temporal_processing(src, dst, sbj_list, split=['']):
     pass
