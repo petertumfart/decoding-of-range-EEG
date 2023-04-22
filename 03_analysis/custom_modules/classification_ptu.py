@@ -10,9 +10,10 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.covariance import LedoitWolf
 from scipy import stats
 from datetime import datetime, timezone
+from sklearn import manifold
 
 
-def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
+def classify(src, dst, sbj, condition, n_timepoints=1, loo=True, tsne=False):
     # There can be only one file  with matching conditions since we are splitting in folders:
     f_name = [f for f in os.listdir(src) if (sbj in f)][0]
 
@@ -183,6 +184,7 @@ def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
         X = np.concatenate([epochs_top.get_data(), epochs_bottom.get_data(), epochs_right.get_data(), epochs_left.get_data(), epochs_center.get_data()])
         y = np.concatenate([np.zeros(len(epochs_top)), np.ones(len(epochs_bottom)), 2*np.ones(len(epochs_right)), 3*np.ones(len(epochs_left)), 4*np.ones(len(epochs_center))])
 
+
     clf = LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto')
     n_len = X.shape[2] - n_timepoints + 1
     for tp in range(n_timepoints, X.shape[2]+1):
@@ -221,9 +223,9 @@ def classify(src, dst, sbj, condition, n_timepoints=1, loo=True):
 
     # Store dataframe to full classification dataframe:
     if loo:
-        _store_scores_df(df_scores, csv_name='dataframes/classification/classification_df.csv')
+        _store_scores_df(df_scores, csv_name=f'{dst}/classification_df.csv')
     else:
-        _store_scores_df(df_scores, csv_name='dataframes/classification/classification_df_5_fold.csv')
+        _store_scores_df(df_scores, csv_name=f'{dst}/classification_df_5_fold.csv')
 
 def get_confusion_matrix(src, dst, sbj_list, ts_of_interest, n_timepoints=1, condition='distance'):
     if 'cue' in src:
@@ -464,7 +466,16 @@ def _fit_glm(S, epochs, shrinkage=False):
         X = X_full[:,:,tp].T # Get data matrix for current timestamp
 
         if shrinkage:
-            Cxs = X.dot(S.T)/np.trace(X.dot(S.T))
+            #Cxs = X.dot(S.T)/np.trace(X.dot(S.T))
+            #Cxs = X.dot(S.T)
+            # Cxs = (X - X.mean(axis=1)) * (S - S.mean(axis=1)).mean(axis)
+
+            Cxs = np.zeros((n_channels, n_conditions))
+
+            for ch in range(n_channels):
+                for con in range(n_conditions):
+                    Cxs[ch, con] = ((X[ch,:] - X[ch,:].mean()) * (S[con,:] - S[con,:].mean()).T).mean()
+
             A = Cxs.dot(Css_inv)
         else:
             A = X.dot(pseudo_inv) # Solve inverse problem

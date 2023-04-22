@@ -7,7 +7,7 @@ import datetime
 from datetime import datetime, timezone
 from scipy.stats import t
 import scipy.io
-from scipy.stats import wilcoxon, ttest_ind
+from scipy.stats import wilcoxon, ttest_ind, ttest_1samp
 import random
 import time
 from multiprocessing import Process, Manager, Pool
@@ -306,29 +306,27 @@ def classification_mean_and_ci(src, dst):
     print(f'Calculation took me: {time.time() - start}seconds.')
 
 
-def glm(src, dst, sbj):
-    # There can be only one file  with matching conditions since we are splitting in folders:
-    f_name = [f for f in os.listdir(src) if (sbj in f)][0]
+def glm(src, dst, sbj_list, split_id, alignment):
 
-    if 'cue_aligned' in src:
-        title_alignment = 'cue_aligned'
-    if 'movement_aligned' in src:
-        title_alignment = 'movement_aligned'
+    # Retrieve all filenames from the source directory:
+    file_names = [f for f in os.listdir(src)]
 
-    file = src + '/' + f_name
-    epochs = mne.read_epochs(file, preload=True)
+    for sbj in sbj_list:
+        # Should be only one for each subject:
+        file = src + '/' + [f for f in file_names if (sbj in f)][0]
 
-    S = _create_parameter_matrix(epochs, z_scoring=True)
+        # Load epochs file:
+        epochs = mne.read_epochs(file, preload=True)
 
-    return(S)
+        S = _create_parameter_matrix(epochs, z_scoring=True)
 
-    # _,_,A = _fit_glm(S, epochs, shrinkage=True)
-    #
-    # # Save regression coefficients:
-    # store_name = f'{dst}/{sbj}_regr_coeff_{title_alignment}_shrink.npy'
-    # np.save(store_name, A)
-    #
-    # np.save(f'{dst}/ch_names.npy', np.array(epochs.ch_names))
+        _,_,A = _fit_glm(S, epochs, shrinkage=True)
+
+        # Save regression coefficients:
+        store_name = f'{dst}/regr-coeff_{sbj}_{alignment}.npy'
+        np.save(store_name, A)
+
+    np.save(f'{dst}/ch_names.npy', np.array(epochs.ch_names))
 
 
 def _create_parameter_matrix(epochs, z_scoring=True):
@@ -417,7 +415,7 @@ def _fit_glm(S, epochs, shrinkage=False):
     A_full[:] = np.nan
 
     if shrinkage:
-        cov = LedoitWolf().fit(S.dot(S.T))
+        cov = LedoitWolf().fit(S.T)#S.dot(S.T))
         Css_inv = np.linalg.inv(cov.covariance_)
         print(f'Shrinkage param: {cov.shrinkage_}')
     else:
@@ -451,6 +449,89 @@ def _fit_glm(S, epochs, shrinkage=False):
     epochs_recon_res = mne.EpochsArray(X_residuals, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
 
     return epochs_recon_fit, epochs_recon_res, A_full
+
+
+def permutation_test(chan, n_cond, n_ts, val_list):
+    n_perm = 10000
+    n_sbj = len(val_list)
+    channel_p_vals = np.zeros((1,n_cond,n_ts))
+    sign_list = [-1, 1]
+    for ts in range(n_ts):
+        for cond in range(n_cond):
+            vals = []
+            for subj in range(n_sbj):
+                vals.append(val_list[subj][chan, cond, ts])
+
+            # Create a random 1, -1 matrix with size len(vals) x n_perm
+            signs = np.random.choice(sign_list, size=(len(vals), n_perm))
+
+            # Apply random signs to the vals:
+            vals = np.array(vals)
+            vals = np.reshape(vals, (len(vals), 1))
+            vals_rep = np.repeat(vals, n_perm, axis=1)
+            vals_to_test = vals_rep * signs
+
+            # Apply one sample t-test:
+            _stat, _pval = ttest_1samp(vals_to_test, popmean=0.0, axis=0)
+
+            orig_stat, orig_p = ttest_1samp(vals, popmean=0.0)
+
+            # Sort stats:
+            _stat.sort()
+
+            # Check how many values in stats are bigger than the original statistic
+            stats_above = _stat > orig_stat
+
+            # Get the number of stats that are bigger than the original statistic:
+            ids_above = stats_above.sum()
+
+            # Get proporotion of idcs that are bigger than original statistic:
+            channel_p_vals[0, cond, ts] = ids_above / n_perm
+
+    return channel_p_vals
+
+
+def _perform_permuation_tests(val_list, bootstrap=True, multiproc=True):
+    n_chan, n_cond, n_ts = val_list[0].shape
+    n_sbj = len(val_list)
+    p_vals = np.zeros((n_chan, n_cond, n_ts))
+
+    start = time.time()
+    # for chan in range(n_chan):
+    p = Pool(processes=n_chan)
+    channel_p_vals = p.starmap(permutation_test, zip(range(n_chan), repeat(n_cond), repeat(n_ts), repeat(val_list)))
+
+    # Extract p_vals:
+    for ch in range(n_chan):
+        # print(channel_ci[0].shape)
+        p_vals[ch,:,:] = channel_p_vals[ch][0,:,:]
+
+    print(f'Permutations tests took me: {round((time.time()-start),2)}') #, end='\r')
+    return p_vals
+
+
+
+def statistical_tests_glm(src, dst, split_id, alignment):
+    # List all files with naming convention 'sbj-grand_avg_<sbj>_<alignment>_<condition>
+    type = 'regr-coeff'
+
+    # Retrieve all filenames from the source directory that contain grand-avg-sbj, conditions and alignment:
+    file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f)]
+
+    A_matrices = []
+    for f in file_names:
+        file = src + '/' + f
+        # Read all files and combine to grand average:
+        A_matrices.append(np.load(file))
+
+    # TODO: Implement permutation_tests if necassary
+    p_vals = _perform_permuation_tests(A_matrices)
+
+    # Store p_vals:
+    store_name = f'{dst}/regr-coeff-p-vals_{alignment}.npy'
+    np.save(store_name, p_vals)
+
+
 
 def temporal_processing(src, dst, sbj_list, split=['']):
     pass
