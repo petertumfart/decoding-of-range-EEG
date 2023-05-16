@@ -14,6 +14,8 @@ from multiprocessing import Process, Manager, Pool
 import sys
 from itertools import repeat
 from sklearn.covariance import LedoitWolf
+from sklearn import linear_model
+from sklearn.linear_model import RidgeCV
 
 
 def _create_condition_list(id):
@@ -306,7 +308,7 @@ def classification_mean_and_ci(src, dst):
     print(f'Calculation took me: {time.time() - start}seconds.')
 
 
-def glm(src, dst, sbj_list, split_id, alignment):
+def glm(src, dst, sbj_list, split_id, alignment, shrink=True):
 
     # Retrieve all filenames from the source directory:
     file_names = [f for f in os.listdir(src)]
@@ -318,13 +320,22 @@ def glm(src, dst, sbj_list, split_id, alignment):
         # Load epochs file:
         epochs = mne.read_epochs(file, preload=True)
 
-        S = _create_parameter_matrix(epochs, z_scoring=True)
+        epochs_ids = equalize_epochs(epochs)
 
-        _,_,A = _fit_glm(S, epochs, shrinkage=True)
+        S = _create_parameter_matrix(epochs[epochs_ids], z_scoring=True)
+
+        _,_,A = _fit_glm(S, epochs[epochs_ids], shrinkage=shrink)
 
         # Save regression coefficients:
-        store_name = f'{dst}/regr-coeff_{sbj}_{alignment}.npy'
+        if shrink:
+            store_name = f'{dst}/regr-coeff_{sbj}_{alignment}_shrink.npy'
+        else:
+            store_name = f'{dst}/regr-coeff_{sbj}_{alignment}_no-shrink.npy'
         np.save(store_name, A)
+
+        # Save parameter matrix:
+        store_name = f'{dst}/param-matrix_{sbj}_{alignment}.npy'
+        np.save(store_name, S)
 
     np.save(f'{dst}/ch_names.npy', np.array(epochs.ch_names))
 
@@ -374,13 +385,46 @@ def _create_parameter_matrix(epochs, z_scoring=True):
 
     # z-score each parameter if the flag is true:
     if z_scoring:
+        # Test for z-scoring:
+        # s_full = np.concatenate([s_short.squeeze(), s_long.squeeze(), s_vert.squeeze(), s_horz.squeeze(),
+        #                          s_intercept.squeeze()])
+        # s_short = (s_short - s_full.mean())/s_full.std()
+        # s_long = (s_long - s_full.mean())/s_full.std()
+        # s_vert = (s_vert - s_full.mean())/s_full.std()
+        # s_horz = (s_horz - s_full.mean())/s_full.std()
+        # s_intercept = (s_intercept - s_full.mean())/s_full.std()
+
         s_short = (s_short - s_short.mean())/s_short.std()
         s_long = (s_long - s_long.mean())/s_long.std()
         s_vert = (s_vert - s_vert.mean())/s_vert.std()
         s_horz = (s_horz - s_horz.mean())/s_horz.std()
 
     # Return S matrix:
-    return np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
+    S = np.concatenate((s_short, s_long, s_vert, s_horz, s_intercept),axis=0)
+    return S.T
+
+def equalize_epochs(epochs):
+    # Equalize epochs:
+    markers = list(epochs.event_id.keys())
+
+    trial_type_markers = ['BTT-s', 'BTT-l', 'TTB-s', 'TTB-l', 'RTL-s', 'RTL-l', 'LTR-s', 'LTR-l']
+    marker_count = np.zeros((8))
+    marker_ids = [[],[],[],[],[],[],[],[]]
+    for epoch in range(len(epochs)):
+        marker = list(epochs[epoch].event_id.keys())[0][:5]
+        marker_position = trial_type_markers.index(marker)
+        marker_ids[marker_position].append(epoch)
+        marker_count[marker_position] += 1
+
+    # Get minimal count:
+    min_count = int(marker_count.min())
+
+    # Randomly sample from the 8 idcs a number of min count samples:
+    equalized_ids = []
+    for elem in range(len(marker_ids)):
+        equalized_ids += list(random.sample(marker_ids[elem], k=min_count))
+
+    return sorted(equalized_ids)
 
 def _fit_glm(S, epochs, shrinkage=False):
     """
@@ -400,48 +444,60 @@ def _fit_glm(S, epochs, shrinkage=False):
         - A_full: np.ndarray
             The matrix of estimated coefficients.
     """
+
     # Create n_channel x n_trials matrix for each timestamp:
     X_full = epochs.get_data() # Retrieves the n_trials x n_channels x n_timestamps data
 
     # Get all dimensions:
     n_trials, n_channels, n_timestamps = X_full.shape
-    n_conditions = S.shape[0]
+    n_conditions = S.shape[1]
 
     X_full_recon = np.empty(X_full.shape)
     X_residuals = np.empty(X_full.shape)
     X_full_recon[:], X_residuals[:] = np.nan, np.nan
 
-    A_full = np.empty((n_channels, n_conditions, n_timestamps), dtype=float)
+    A_full = np.empty((n_conditions, n_channels, n_timestamps), dtype=float)
     A_full[:] = np.nan
 
     if shrinkage:
-        cov = LedoitWolf().fit(S.T)#S.dot(S.T))
+        cov = LedoitWolf().fit(S)
+        print(cov.covariance_)
         Css_inv = np.linalg.inv(cov.covariance_)
+        print(Css_inv)
         print(f'Shrinkage param: {cov.shrinkage_}')
     else:
         pseudo_inv = np.linalg.pinv(S) # Calculate pseudoinverse for S
-    for tp in range(len(epochs.times)):
-        X = X_full[:,:,tp].T # Get data matrix for current timestamp
+    for tp in range(n_timestamps):
+        X = X_full[:,:,tp] # Get data matrix for current timestamp
 
         if shrinkage:
-            #Cxs = X.dot(S.T)/np.trace(X.dot(S.T))
-            Cxs = X.dot(S.T)
-            # Cxs = (X - X.mean(axis=1)) * (S - S.mean(axis=1)).mean(axis)
+            # reg = linear_model.Ridge(alpha=cov.shrinkage_)
+            # A = reg.fit(S, X).coef_.T
 
-            # Cxs = np.zeros((n_channels, n_conditions))
+            # Make X zero mean:
+            # X = X - X.mean(axis=0)
+            Csx = S.T.dot(X)
+            # Csx = calc_cross_cov(S,X) # 5x60
+
+            A = 1/n_trials * Css_inv.dot(Csx)
+
+
+            # # list of alphas to check: 100 values from 0 to 5 with
+            # r_alphas = np.logspace(-6, 6, 13)
+            # # initiate the cross validation over alphas
+            # ridge_model = RidgeCV(alphas=r_alphas).fit(S,X)
             #
-            # for ch in range(n_channels):
-            #     for con in range(n_conditions):
-            #         Cxs[ch, con] = ((X[ch,:] - X[ch,:].mean()) * (S[con,:] - S[con,:].mean()).T).mean()
+            # print(ridge_model.alpha_)
+            # A = ridge_model.coef_.T
 
-            A = Cxs.dot(Css_inv)
+            print(f'Timepoint {tp}/{n_timestamps}', end='\r')
         else:
-            A = X.dot(pseudo_inv) # Solve inverse problem
+            A = pseudo_inv.dot(X) # Solve inverse problem
 
         A_full[:,:,tp] = A
-        X_hat = A.dot(S) # Get EEG activity explained by conditions
-        X_full_recon[:,:,tp] = X_hat.T # Add to reconstructed EEG
-        X_residuals[:,:,tp] = X.T-X_hat.T # Add residuals to residuals EEG
+        X_hat = S.dot(A) # Get EEG activity explained by conditions
+        X_full_recon[:,:,tp] = X_hat # Add to reconstructed EEG
+        X_residuals[:,:,tp] = X-X_hat # Add residuals to residuals EEG
 
     # Create epochs array for the reconstructed EEG, as well as for the residuals:
     epochs_recon_fit = mne.EpochsArray(X_full_recon, info=epochs.info, events=epochs.events, tmin=epochs.tmin, event_id=epochs.event_id, flat=epochs.flat, reject_tmin=epochs.reject_tmin, reject_tmax=epochs.reject_tmax)
@@ -450,6 +506,29 @@ def _fit_glm(S, epochs, shrinkage=False):
 
     return epochs_recon_fit, epochs_recon_res, A_full
 
+def calc_cross_cov(A,B):
+    n_trials, n_conditions = A.shape
+    n_trials, n_channels = B.shape
+
+    Cab = np.zeros((n_conditions, n_channels))
+
+    # Subtract mean from each trial:
+    A_clean = A - A.mean(axis=1).reshape((A.shape[0],1))
+    B_clean = B - B.mean(axis=1).reshape((A.shape[0],1))
+
+    for i in range(n_trials):
+        Cab += A_clean[i,:].reshape((n_conditions,1))*B_clean[i,:].reshape((n_channels,1)).T
+    Cab = 1/n_trials * Cab
+
+
+    # for j in range(n_conditions):
+    #     for k in range(n_channels):
+    #         qjk = 0
+    #         for i in range(n_trials):
+    #             qjk += (A[i,j]-A[i,:].mean()) * (B[i,k]-B[i,:].mean())
+    #         qjk = qjk/(n_trials-1)
+    #         Cab[j,k] = qjk
+    return Cab
 
 def permutation_test(chan, n_cond, n_ts, val_list):
     n_perm = 10000
@@ -460,7 +539,7 @@ def permutation_test(chan, n_cond, n_ts, val_list):
         for cond in range(n_cond):
             vals = []
             for subj in range(n_sbj):
-                vals.append(val_list[subj][chan, cond, ts])
+                vals.append(val_list[subj][cond, chan, ts])
 
             # Create a random 1, -1 matrix with size len(vals) x n_perm
             signs = np.random.choice(sign_list, size=(len(vals), n_perm))
@@ -492,9 +571,11 @@ def permutation_test(chan, n_cond, n_ts, val_list):
 
 
 def _perform_permuation_tests(val_list, bootstrap=True, multiproc=True):
-    n_chan, n_cond, n_ts = val_list[0].shape
+    n_cond, n_chan, n_ts = val_list[0].shape
     n_sbj = len(val_list)
     p_vals = np.zeros((n_chan, n_cond, n_ts))
+
+    print(n_chan)
 
     start = time.time()
     # for chan in range(n_chan):
@@ -511,12 +592,17 @@ def _perform_permuation_tests(val_list, bootstrap=True, multiproc=True):
 
 
 
-def statistical_tests_glm(src, dst, split_id, alignment):
+def statistical_tests_glm(src, dst, split_id, alignment, shrink=True):
     # List all files with naming convention 'sbj-grand_avg_<sbj>_<alignment>_<condition>
     type = 'regr-coeff'
 
-    # Retrieve all filenames from the source directory that contain grand-avg-sbj, conditions and alignment:
-    file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f)]
+    # Retrieve all filenames from the source directory that contain regr-coeff and alignement:
+    if shrink:
+        file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f) and not ('no-shrink' in f)
+                      and not ('p-val' in f)]
+    else:
+        file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f) and ('no-shrink' in f)
+                      and not ('p-val' in f)]
 
     A_matrices = []
     for f in file_names:
@@ -524,12 +610,190 @@ def statistical_tests_glm(src, dst, split_id, alignment):
         # Read all files and combine to grand average:
         A_matrices.append(np.load(file))
 
-    # TODO: Implement permutation_tests if necassary
     p_vals = _perform_permuation_tests(A_matrices)
 
     # Store p_vals:
-    store_name = f'{dst}/regr-coeff-p-vals_{alignment}.npy'
+    if shrink:
+        store_name = f'{dst}/regr-coeff-p-vals_{alignment}_shrink.npy'
+    else:
+        store_name = f'{dst}/regr-coeff-p-vals_{alignment}_no-shrink.npy'
     np.save(store_name, p_vals)
+
+
+
+def two_sample_tests_glm(src, dst, split_id, alignment, shrink=True):
+    # List all files with naming convention 'sbj-grand_avg_<sbj>_<alignment>_<condition>
+    type = 'regr-coeff'
+
+    # Retrieve all filenames from the source directory that contain regr-coeff and alignement:
+    if shrink:
+        file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f) and not ('no-shrink' in f)
+                      and not ('p-val' in f)]
+    else:
+        file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f) and ('no-shrink' in f)
+                      and not ('p-val' in f)]
+
+    A_matrices = []
+    for f in file_names:
+        file = src + '/' + f
+        # Read all files and combine to grand average:
+        A_matrices.append(np.load(file))
+
+    p_vals = _perform_two_sample_permuation_tests(A_matrices)
+
+    # Store p_vals:
+    if shrink:
+        store_name = f'{dst}/two-sample-p-vals_{alignment}_shrink.npy'
+    else:
+        store_name = f'{dst}/two-sample-p-vals_{alignment}_no-shrink.npy'
+    np.save(store_name, p_vals)
+
+
+
+def _perform_two_sample_permuation_tests(val_list, bootstrap=True, multiproc=True):
+    n_cond, n_chan, n_ts = val_list[0].shape
+    n_sbj = len(val_list)
+
+    print(n_chan)
+
+    # Overwrite n_cond since we are performing two-sample tests:
+    n_cond = 3
+    p_vals = np.zeros((n_chan, n_cond, n_ts))
+
+    start = time.time()
+    # for chan in range(n_chan):
+    p = Pool(processes=n_chan)
+    channel_p_vals = p.starmap(permutation_test_two_sample, zip(range(n_chan), repeat(n_cond), repeat(n_ts), repeat(val_list)))
+
+    # Extract p_vals:
+    for ch in range(n_chan):
+        # print(channel_ci[0].shape)
+        p_vals[ch,:,:] = channel_p_vals[ch][0,:,:]
+
+    print(f'Permutations tests took me: {round((time.time()-start),2)}') #, end='\r')
+    return p_vals
+
+
+def permutation_test_two_sample(chan, n_cond, n_ts, val_list):
+    n_perm = 10000
+    n_sbj = len(val_list)
+    channel_p_vals = np.zeros((1,n_cond,n_ts))
+    sign_list = [-1, 1]
+    for ts in range(n_ts):
+        vals_1 = []
+        vals_2 = []
+        for subj in range(n_sbj):
+            vals_1.append(val_list[subj][0, chan, ts])
+            vals_2.append(val_list[subj][1, chan, ts])
+
+        # Create a random 1, -1 matrix with size len(vals) x n_perm
+        signs = np.random.choice(sign_list, size=(len(vals_1), n_perm))
+
+        # Apply random signs to the vals:
+        vals_1 = np.array(vals_1)
+        vals_1 = np.reshape(vals_1, (len(vals_1), 1))
+        vals_rep_1 = np.repeat(vals_1, n_perm, axis=1)
+        vals_to_test_1 = vals_rep_1 * signs
+
+        vals_2 = np.array(vals_2)
+        vals_2 = np.reshape(vals_2, (len(vals_2), 1))
+        vals_rep_2 = np.repeat(vals_2, n_perm, axis=1)
+        vals_to_test_2 = vals_rep_2 * signs
+
+        # Apply one sample t-test:
+        _stat, _pval = ttest_ind(vals_to_test_1, vals_to_test_2, axis=0)
+
+        orig_stat, orig_p = ttest_ind(vals_1, vals_2)
+
+        # Sort stats:
+        _stat.sort()
+
+        # Check how many values in stats are bigger than the original statistic
+        stats_above = _stat > orig_stat
+
+        # Get the number of stats that are bigger than the original statistic:
+        ids_above = stats_above.sum()
+
+        # Get proporotion of idcs that are bigger than original statistic:
+        channel_p_vals[0, 0, ts] = ids_above / n_perm
+
+        vals_1 = []
+        vals_2 = []
+        for subj in range(n_sbj):
+            vals_1.append(val_list[subj][2, chan, ts])
+            vals_2.append(val_list[subj][3, chan, ts])
+
+        # Create a random 1, -1 matrix with size len(vals) x n_perm
+        signs = np.random.choice(sign_list, size=(len(vals_1), n_perm))
+
+        # Apply random signs to the vals:
+        vals_1 = np.array(vals_1)
+        vals_1 = np.reshape(vals_1, (len(vals_1), 1))
+        vals_rep_1 = np.repeat(vals_1, n_perm, axis=1)
+        vals_to_test_1 = vals_rep_1 * signs
+
+        vals_2 = np.array(vals_2)
+        vals_2 = np.reshape(vals_2, (len(vals_2), 1))
+        vals_rep_2 = np.repeat(vals_2, n_perm, axis=1)
+        vals_to_test_2 = vals_rep_2 * signs
+
+        # Apply one sample t-test:
+        _stat, _pval = ttest_ind(vals_to_test_1, vals_to_test_2, axis=0)
+
+        orig_stat, orig_p = ttest_ind(vals_1, vals_2)
+
+        # Sort stats:
+        _stat.sort()
+
+        # Check how many values in stats are bigger than the original statistic
+        stats_above = _stat > orig_stat
+
+        # Get the number of stats that are bigger than the original statistic:
+        ids_above = stats_above.sum()
+
+        # Get proporotion of idcs that are bigger than original statistic:
+        channel_p_vals[0, 1, ts] = ids_above / n_perm
+
+        vals_1 = []
+        vals_2 = []
+        for subj in range(n_sbj):
+            vals_1.append(np.abs(val_list[subj][0, chan, ts]))
+            vals_1.append(np.abs(val_list[subj][1, chan, ts]))
+            vals_2.append(np.abs(val_list[subj][2, chan, ts]))
+            vals_2.append(np.abs(val_list[subj][3, chan, ts]))
+
+        # Create a random 1, -1 matrix with size len(vals) x n_perm
+        signs = np.random.choice(sign_list, size=(len(vals_1), n_perm))
+
+        # Apply random signs to the vals:
+        vals_1 = np.array(vals_1)
+        vals_1 = np.reshape(vals_1, (len(vals_1), 1))
+        vals_rep_1 = np.repeat(vals_1, n_perm, axis=1)
+        vals_to_test_1 = vals_rep_1 * signs
+
+        vals_2 = np.array(vals_2)
+        vals_2 = np.reshape(vals_2, (len(vals_2), 1))
+        vals_rep_2 = np.repeat(vals_2, n_perm, axis=1)
+        vals_to_test_2 = vals_rep_2 * signs
+
+        # Apply one sample t-test:
+        _stat, _pval = ttest_ind(vals_to_test_1, vals_to_test_2, axis=0)
+
+        orig_stat, orig_p = ttest_ind(vals_1, vals_2)
+
+        # Sort stats:
+        _stat.sort()
+
+        # Check how many values in stats are bigger than the original statistic
+        stats_above = _stat > orig_stat
+
+        # Get the number of stats that are bigger than the original statistic:
+        ids_above = stats_above.sum()
+
+        # Get proporotion of idcs that are bigger than original statistic:
+        channel_p_vals[0, 2, ts] = ids_above / n_perm
+
+    return channel_p_vals
 
 
 
