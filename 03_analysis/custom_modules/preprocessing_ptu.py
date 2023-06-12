@@ -89,7 +89,7 @@ def filter_fifs(src, dst, sbj, paradigm='paradigm'):
     raw = raw.copy().filter(l_freq=0.4, h_freq=None, picks=['eeg', 'eog'], method='iir')
 
     # Notch filter:
-    raw = raw.copy().notch_filter(freqs=[50], picks=['eeg', 'eog'])
+    raw = raw.copy().notch_filter(freqs=[50], picks=['eeg', 'eog'], method='iir')
 
     # Store the filtered file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_highpass_notch_filtered_raw.fif'
@@ -284,7 +284,7 @@ def lowpass_filter(src, dst, sbj, paradigm='paradigm'):
     raw = mne.io.read_raw(file, preload=True)
 
     # Lowpass filter:
-    raw = raw.copy().filter(l_freq=None, h_freq=5.0, picks=['eeg', 'eog'], method='iir')
+    raw = raw.copy().filter(l_freq=None, h_freq=3.0, picks=['eeg', 'eog'], method='iir')
 
     # Store the filtered file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_lowpass_filtered_raw.fif'
@@ -388,8 +388,8 @@ def epoch_and_resample(src, dst, sbj, paradigm='paradigm', cue_aligned=True, res
         # Downsample to 10 Hz:
         epochs = epochs.copy().resample(10)
 
-    else:
-        epochs = epochs.copy().resample(25)
+    # else:
+    #     epochs = epochs.copy().resample(25)
 
     # Store the epoched file:
     store_name = dst + '/' + sbj + '_' + paradigm + '_epoched_and_resampled_epo.fif'

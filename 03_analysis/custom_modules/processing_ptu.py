@@ -69,7 +69,7 @@ def ci_calc(chan, n_ts, avg):
             vals.append(avg[subj][chan, ts])
 
         # Bootstrapping for confidence interval:
-        values = np.random.choice(vals, size=(len(vals), n_bootstrap)).mean(axis=0)
+        values = np.random.choice(vals, size=(len(vals), n_bootstrap), replace=True).mean(axis=0)
         # values = [np.random.choice(vals, size=len(vals), replace=True).mean() for i in range(n_bootstrap)]
         ch_ci[1,ts], ch_ci[0,ts] = np.percentile(values,[100*(1-confidence)/2,100*(1-(1-confidence)/2)])
     return ch_ci
@@ -240,20 +240,48 @@ def get_timings(src, dst, sbj_list, split_id):
         # Load epochs file:
         epochs = mne.read_epochs(file, preload=True)
 
-        cue_times, release_times, touch_times = _get_cue_movement_onsets(epochs.annotations)
+        if split_id == 0:
+            cue_times, release_times, touch_times = _get_cue_movement_onsets(epochs.annotations)
 
-        # Store the subject grand averages:
-        store_name = f'{dst}/timings-cue_{sbj}_{alignment}.npy'
-        np.save(store_name, cue_times)
-        store_name = f'{dst}/timings-release_{sbj}_{alignment}.npy'
-        np.save(store_name, cue_times)
-        store_name = f'{dst}/timings-touch_{sbj}_{alignment}.npy'
-        np.save(store_name, cue_times)
+            # Store the subject grand averages:
+            store_name = f'{dst}/timings-cue_{sbj}_{alignment}.npy'
+            np.save(store_name, cue_times)
+            store_name = f'{dst}/timings-release_{sbj}_{alignment}.npy'
+            np.save(store_name, release_times)
+            store_name = f'{dst}/timings-touch_{sbj}_{alignment}.npy'
+            np.save(store_name, touch_times)
+
+        elif split_id == 1:
+            cue_times_l, release_times_l, touch_times_l = _get_cue_movement_onsets(epochs.annotations, abbr='l')
+            cue_times_s, release_times_s, touch_times_s = _get_cue_movement_onsets(epochs.annotations, abbr='s')
+
+            # Store the subject grand averages:
+            store_name = f'{dst}/timings-cue-l_{sbj}_{alignment}.npy'
+            np.save(store_name, cue_times_l)
+            store_name = f'{dst}/timings-release-l_{sbj}_{alignment}.npy'
+            np.save(store_name, release_times_l)
+            store_name = f'{dst}/timings-touch-l_{sbj}_{alignment}.npy'
+            np.save(store_name, touch_times_l)
+
+            # Store the subject grand averages:
+            store_name = f'{dst}/timings-cue-s_{sbj}_{alignment}.npy'
+            np.save(store_name, cue_times_s)
+            store_name = f'{dst}/timings-release-s_{sbj}_{alignment}.npy'
+            np.save(store_name, release_times_s)
+            store_name = f'{dst}/timings-touch-s_{sbj}_{alignment}.npy'
+            np.save(store_name, touch_times_s)
 
 
-def _get_cue_movement_onsets(annot):
+def _get_cue_movement_onsets(annot, abbr=None):
+
+    if abbr == None:
+        trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
+    elif abbr == 'l':
+        trial_type_markers = ['LTR-l', 'RTL-l', 'TTB-l', 'BTT-l']
+    elif abbr == 's':
+        trial_type_markers = ['LTR-s', 'RTL-s', 'TTB-s', 'BTT-s']
+
     # Get difference between cue onset and movement onset (*i*1):
-    trial_type_markers = ['LTR-s', 'LTR-l', 'RTL-s', 'RTL-l', 'TTB-s', 'TTB-l', 'BTT-s', 'BTT-l']
     cue_times = []
     release_times = []
     touch_times = []
@@ -545,7 +573,7 @@ def permutation_test(chan, n_cond, n_ts, val_list):
             signs = np.random.choice(sign_list, size=(len(vals), n_perm))
 
             # Apply random signs to the vals:
-            vals = np.array(vals)
+            vals = np.array(np.abs(vals))
             vals = np.reshape(vals, (len(vals), 1))
             vals_rep = np.repeat(vals, n_perm, axis=1)
             vals_to_test = vals_rep * signs
