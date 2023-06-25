@@ -573,27 +573,31 @@ def permutation_test(chan, n_cond, n_ts, val_list):
             signs = np.random.choice(sign_list, size=(len(vals), n_perm))
 
             # Apply random signs to the vals:
-            vals = np.array(np.abs(vals))
-            vals = np.reshape(vals, (len(vals), 1))
-            vals_rep = np.repeat(vals, n_perm, axis=1)
+            abs_vals = np.array(np.abs(vals))
+            abs_vals = np.reshape(abs_vals, (len(abs_vals), 1))
+            vals_rep = np.repeat(abs_vals, n_perm, axis=1)
             vals_to_test = vals_rep * signs
 
             # Apply one sample t-test:
             _stat, _pval = ttest_1samp(vals_to_test, popmean=0.0, axis=0)
-
             orig_stat, orig_p = ttest_1samp(vals, popmean=0.0)
 
             # Sort stats:
             _stat.sort()
 
             # Check how many values in stats are bigger than the original statistic
-            stats_above = _stat > orig_stat
+            stats_above = _stat >= orig_stat
+            stats_below = _stat <= orig_stat
 
             # Get the number of stats that are bigger than the original statistic:
             ids_above = stats_above.sum()
+            ids_below = stats_below.sum()
 
             # Get proporotion of idcs that are bigger than original statistic:
-            channel_p_vals[0, cond, ts] = ids_above / n_perm
+            p_above = ids_above / n_perm
+            p_below = ids_below / n_perm
+
+            channel_p_vals[0, cond, ts] = min(p_above, p_below)
 
     return channel_p_vals
 
@@ -632,6 +636,7 @@ def statistical_tests_glm(src, dst, split_id, alignment, shrink=True):
         file_names = [f for f in os.listdir(src) if (type in f) and (alignment in f) and ('no-shrink' in f)
                       and not ('p-val' in f)]
 
+    print(file_names)
     A_matrices = []
     for f in file_names:
         file = src + '/' + f
@@ -710,78 +715,90 @@ def permutation_test_two_sample(chan, n_cond, n_ts, val_list):
     for ts in range(n_ts):
         vals_1 = []
         vals_2 = []
+
+        # Long v short
         for subj in range(n_sbj):
             vals_1.append(val_list[subj][0, chan, ts])
             vals_2.append(val_list[subj][1, chan, ts])
 
+        # Calculate the difference population:
+        diff_pop = np.array(vals_1) - np.array(vals_2)
+
         # Create a random 1, -1 matrix with size len(vals) x n_perm
-        signs = np.random.choice(sign_list, size=(len(vals_1), n_perm))
+        signs = np.random.choice(sign_list, size=(len(diff_pop), n_perm))
 
         # Apply random signs to the vals:
-        vals_1 = np.array(vals_1)
-        vals_1 = np.reshape(vals_1, (len(vals_1), 1))
-        vals_rep_1 = np.repeat(vals_1, n_perm, axis=1)
-        vals_to_test_1 = vals_rep_1 * signs
-
-        vals_2 = np.array(vals_2)
-        vals_2 = np.reshape(vals_2, (len(vals_2), 1))
-        vals_rep_2 = np.repeat(vals_2, n_perm, axis=1)
-        vals_to_test_2 = vals_rep_2 * signs
+        abs_vals = np.array(np.abs(diff_pop))
+        abs_vals = np.reshape(abs_vals, (len(abs_vals), 1))
+        vals_rep = np.repeat(abs_vals, n_perm, axis=1)
+        vals_to_test = vals_rep * signs
 
         # Apply one sample t-test:
-        _stat, _pval = ttest_ind(vals_to_test_1, vals_to_test_2, axis=0)
+        _stat, _pval = ttest_1samp(vals_to_test, popmean=0.0, axis=0)
 
-        orig_stat, orig_p = ttest_ind(vals_1, vals_2)
+        orig_stat, orig_p = ttest_1samp(np.array(diff_pop), popmean=0.0)
 
         # Sort stats:
         _stat.sort()
 
         # Check how many values in stats are bigger than the original statistic
-        stats_above = _stat > orig_stat
+        stats_above = _stat >= orig_stat
+        stats_below = _stat <= orig_stat
 
         # Get the number of stats that are bigger than the original statistic:
         ids_above = stats_above.sum()
+        ids_below = stats_below.sum()
 
         # Get proporotion of idcs that are bigger than original statistic:
-        channel_p_vals[0, 0, ts] = ids_above / n_perm
+        p_above = ids_above / n_perm
+        p_below = ids_below / n_perm
+
+        channel_p_vals[0, 0, ts] = min(p_above, p_below)
+
 
         vals_1 = []
         vals_2 = []
+        # Horz v vert:
         for subj in range(n_sbj):
             vals_1.append(val_list[subj][2, chan, ts])
             vals_2.append(val_list[subj][3, chan, ts])
 
+        # Calculate the difference population:
+        diff_pop = np.array(vals_1) - np.array(vals_2)
+
         # Create a random 1, -1 matrix with size len(vals) x n_perm
-        signs = np.random.choice(sign_list, size=(len(vals_1), n_perm))
+        signs = np.random.choice(sign_list, size=(len(diff_pop), n_perm))
 
         # Apply random signs to the vals:
-        vals_1 = np.array(vals_1)
-        vals_1 = np.reshape(vals_1, (len(vals_1), 1))
-        vals_rep_1 = np.repeat(vals_1, n_perm, axis=1)
-        vals_to_test_1 = vals_rep_1 * signs
-
-        vals_2 = np.array(vals_2)
-        vals_2 = np.reshape(vals_2, (len(vals_2), 1))
-        vals_rep_2 = np.repeat(vals_2, n_perm, axis=1)
-        vals_to_test_2 = vals_rep_2 * signs
+        abs_vals = np.array(np.abs(diff_pop))
+        abs_vals = np.reshape(abs_vals, (len(abs_vals), 1))
+        vals_rep = np.repeat(abs_vals, n_perm, axis=1)
+        vals_to_test = vals_rep * signs
 
         # Apply one sample t-test:
-        _stat, _pval = ttest_ind(vals_to_test_1, vals_to_test_2, axis=0)
+        _stat, _pval = ttest_1samp(vals_to_test, popmean=0.0, axis=0)
 
-        orig_stat, orig_p = ttest_ind(vals_1, vals_2)
+        orig_stat, orig_p = ttest_1samp(np.array(diff_pop), popmean=0.0)
 
         # Sort stats:
         _stat.sort()
 
         # Check how many values in stats are bigger than the original statistic
-        stats_above = _stat > orig_stat
+        stats_above = _stat >= orig_stat
+        stats_below = _stat <= orig_stat
 
         # Get the number of stats that are bigger than the original statistic:
         ids_above = stats_above.sum()
+        ids_below = stats_below.sum()
 
         # Get proporotion of idcs that are bigger than original statistic:
-        channel_p_vals[0, 1, ts] = ids_above / n_perm
+        p_above = ids_above / n_perm
+        p_below = ids_below / n_perm
 
+        channel_p_vals[0, 1, ts] = min(p_above, p_below)
+
+
+        # Range v direction:
         vals_1 = []
         vals_2 = []
         for subj in range(n_sbj):
@@ -790,36 +807,39 @@ def permutation_test_two_sample(chan, n_cond, n_ts, val_list):
             vals_2.append(np.abs(val_list[subj][2, chan, ts]))
             vals_2.append(np.abs(val_list[subj][3, chan, ts]))
 
+        # Calculate the difference population:
+        diff_pop = np.array(vals_1) - np.array(vals_2)
+
         # Create a random 1, -1 matrix with size len(vals) x n_perm
-        signs = np.random.choice(sign_list, size=(len(vals_1), n_perm))
+        signs = np.random.choice(sign_list, size=(len(diff_pop), n_perm))
 
         # Apply random signs to the vals:
-        vals_1 = np.array(vals_1)
-        vals_1 = np.reshape(vals_1, (len(vals_1), 1))
-        vals_rep_1 = np.repeat(vals_1, n_perm, axis=1)
-        vals_to_test_1 = vals_rep_1 * signs
-
-        vals_2 = np.array(vals_2)
-        vals_2 = np.reshape(vals_2, (len(vals_2), 1))
-        vals_rep_2 = np.repeat(vals_2, n_perm, axis=1)
-        vals_to_test_2 = vals_rep_2 * signs
+        abs_vals = np.array(np.abs(diff_pop))
+        abs_vals = np.reshape(abs_vals, (len(abs_vals), 1))
+        vals_rep = np.repeat(abs_vals, n_perm, axis=1)
+        vals_to_test = vals_rep * signs
 
         # Apply one sample t-test:
-        _stat, _pval = ttest_ind(vals_to_test_1, vals_to_test_2, axis=0)
+        _stat, _pval = ttest_1samp(vals_to_test, popmean=0.0, axis=0)
 
-        orig_stat, orig_p = ttest_ind(vals_1, vals_2)
+        orig_stat, orig_p = ttest_1samp(np.array(diff_pop), popmean=0.0)
 
         # Sort stats:
         _stat.sort()
 
         # Check how many values in stats are bigger than the original statistic
-        stats_above = _stat > orig_stat
+        stats_above = _stat >= orig_stat
+        stats_below = _stat <= orig_stat
 
         # Get the number of stats that are bigger than the original statistic:
         ids_above = stats_above.sum()
+        ids_below = stats_below.sum()
 
         # Get proporotion of idcs that are bigger than original statistic:
-        channel_p_vals[0, 2, ts] = ids_above / n_perm
+        p_above = ids_above / n_perm
+        p_below = ids_below / n_perm
+
+        channel_p_vals[0, 2, ts] = min(p_above, p_below)
 
     return channel_p_vals
 
