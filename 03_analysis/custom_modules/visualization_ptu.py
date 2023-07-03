@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def glm_significant_topo(src, dst, sbj_list, alignment, p_crit=.05, shrink=True, one_sample=True):
+def glm_significant_topo(src, dst, sbj_list, alignment, p_crit=.05, shrink=True, one_sample=True, early=False):
     # Load p_vals of glm:
     if shrink:
         if one_sample:
@@ -36,20 +36,32 @@ def glm_significant_topo(src, dst, sbj_list, alignment, p_crit=.05, shrink=True,
 
         # Add grand average into mne structure:
         grand_avg_extended = temp_avg.reshape((1, n_chan, n_times))
-        grand_avg_epochs = mne.EpochsArray(grand_avg_extended, epochs.info, tmin=epochs.tmin)
 
         if alignment == 'cue-aligned':
-            times = np.arange(2.0, 3.0, 0.1)
+            grand_avg_epochs = mne.EpochsArray(grand_avg_extended, epochs.info, tmin=epochs.tmin-2.0)
+        else:
+            grand_avg_epochs = mne.EpochsArray(grand_avg_extended, epochs.info, tmin=epochs.tmin)
+
+        if alignment == 'cue-aligned':
+            times = np.arange(0.0, 1.0, 0.1)
+            if early:
+                times = np.arange(-2.0,-1.0,0.1)
         elif alignment == 'movement-aligned':
             times = np.arange(-.5, .5, .1)
 
         fig = grand_avg_epochs.average().plot_topomap(times, ch_type='eeg', ncols=10,
-                                                      nrows='auto', image_interp='linear')#, scalings=dict(eeg=1e-6))#, units='a.u.', vlim=(0, 1))
+                                                      nrows='auto', image_interp='nearest')#, scalings=dict(eeg=1e-6))#, units='a.u.', vlim=(0, 1))
         if shrink:
             if one_sample:
-                fig.savefig(f'{dst}/glm-significant-topo_{alignment}_shrink_{cond}_one-sample.png', dpi=400)
+                if early:
+                    fig.savefig(f'{dst}/glm-significant-topo_{alignment}_shrink_{cond}_one-sample_early.png', dpi=400)
+                else:
+                    fig.savefig(f'{dst}/glm-significant-topo_{alignment}_shrink_{cond}_one-sample.png', dpi=400)
             else:
-                fig.savefig(f'{dst}/glm-significant-topo_{alignment}_shrink_{cond}_two-sample.png', dpi=400)
+                if early:
+                    fig.savefig(f'{dst}/glm-significant-topo_{alignment}_shrink_{cond}_two-sample_early.png', dpi=400)
+                else:
+                    fig.savefig(f'{dst}/glm-significant-topo_{alignment}_shrink_{cond}_two-sample.png', dpi=400)
         else:
             if one_sample:
                 fig.savefig(f'{dst}/glm-significant-topo_{alignment}_no-shrink_{cond}_one-sample.png', dpi=400)
